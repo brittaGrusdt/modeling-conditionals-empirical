@@ -1,0 +1,4 @@
+globalStore.n_prior_samples = data["n_forward_samples"][0]
+
+var distributions = {"prior":  state_prior()}
+distributions

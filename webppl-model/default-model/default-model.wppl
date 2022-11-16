@@ -1,0 +1,106 @@
+// Parameters
+// states + utterances
+globalStore.utterances = data["utterances"]
+globalStore.n_prior_samples = data["n_forward_samples"][0]
+globalStore.alpha = data["alpha"][0]
+globalStore.cost = {
+  conditional: data["cost_conditional"][0],
+  might: data["cost_might"][0],
+  conjunction: data["cost_conjunction"][0],
+  literal: data["cost_literal"][0]
+}
+
+globalStore.beta_shape1 = data["noise_shape1"][0]
+globalStore.beta_shape2 = data["noise_shape2"][0]
+globalStore.theta_shape1 = data["causal_power_shape1"][0]
+globalStore.theta_shape2 = data["causal_power_shape2"][0]
+
+globalStore.thresholds = {theta: data["theta"][0], theta_might: data["theta_might"][0]}
+globalStore.ps_utts = data["p_utts"]
+
+var LEVEL_MAX = data["level_max"][0]
+var verbose = data["verbose"][0]
+
+if(verbose){
+  display('level_max: ' + LEVEL_MAX);
+  display("alpha:" + globalStore.alpha)
+  display("theta:" + globalStore.thresholds.theta)
+  display("theta_might:" + globalStore.thresholds.theta_might)
+}
+
+// Run from R ----------------------------------------------------------------
+var run = function(level){
+  if(verbose){ display("run " + level + " ...") }
+  return level == "prior" ? state_prior() :
+         level == "LL" ? literal_listener(data["utt"][0], globalStore.thresholds) :
+         listener(data["utt"][0])
+}
+
+//globalStore.state_prior = run("prior")
+globalStore.state_prior = build_state_prior_from_data(data["prior_samples"])
+
+var all_bns = globalStore.state_prior.support()
+if(verbose) {
+  display('# states: ' + all_bns.length)
+}
+
+var wrap_ll = function(u){
+  display(u)
+  literal_listener(u, globalStore.thresholds)
+}
+
+var run_speaker = function(bns){
+  var distrs = map(function(bn){
+    return(LEVEL_MAX == "speaker" ? speaker(bn, false) :
+           (LEVEL_MAX == "speaker0" ? speaker0(bn, false) : undefined))
+  }, bns)
+
+  var distributions = {"speaker_": distrs, "bns": bns}
+  distributions
+}
+
+// RUN MODEL
+if(LEVEL_MAX == "speaker" || LEVEL_MAX == "speaker0"){
+  var n_samples = data["n_samples"][0]
+  // define set of input states for speaker
+  // 1. draw n_samples from prior or
+  // 2. compute predictions just for given set of bn_ids or
+  // 3. take all bns from support of prior
+  var bns = n_samples != 0 ? repeat(n_samples, function(){sample(globalStore.state_prior)}) :
+            data["speaker_bn_ids"] ? filter(function(bn){
+              return data["speaker_bn_ids"].includes(bn.bn_id)
+            }, all_bns) : all_bns;
+  var all_ids =  _.map(bns, 'bn_id')
+  if(verbose) {
+    display('nb bns considered for speaker, sampled from prior:' + bns.length)
+  }
+  var distributions = run_speaker(bns)
+  var obj = {distributions, all_ids}
+  obj
+
+} else if(LEVEL_MAX == "ll_all_utts"){
+  var distributions = {"ll": map(wrap_ll, globalStore.utterances)}
+  distributions
+
+} else if (LEVEL_MAX == "priorN"){
+  var n_samples = data["n_samples"][0]
+  if(verbose) {
+    display('sample ' + n_samples + ' states from prior...')
+  }
+  var bns = repeat(n_samples, function(){
+    var s = sample(globalStore.state_prior)
+    return s
+  })
+  var distributions = {"bns": bns}
+  distributions
+
+} else{
+  var distributions =
+    LEVEL_MAX == "prior" ? {"prior": globalStore.state_prior} :
+    LEVEL_MAX == "LL" ? {"prior": globalStore.state_prior, "LL": run("LL")} :
+    LEVEL_MAX == "PL" ? {"prior": globalStore.state_prior, "LL": run("LL"),
+                         "PL": run("PL")} :
+    error("unknown output level: " + LEVEL_MAX)
+  // object to return to R
+  distributions
+}

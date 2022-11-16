@@ -1,0 +1,40 @@
+globalStore.thresholds = {theta: data["theta"][0], theta_likely : 0.5, theta_might: data["theta_might"][0]}
+var verbose = data["verbose"][0]
+globalStore.n_prior_samples = data["n_forward_samples"][0]
+
+globalStore.state_prior = state_prior()
+
+if(verbose){
+  display("theta: " + globalStore.thresholds.theta)
+  display("theta: " + globalStore.thresholds.theta_might)
+  display("#forward samples: " + globalStore.n_prior_samples)
+  //display("variables: " + variables)
+}
+
+var variables = reduce(function(token, acc){
+  acc.concat([[token, negate(token)]])
+}, [], data["vars"])
+
+var utterances = make_utterances(variables, false)
+
+var all_states = globalStore.state_prior.support()
+if(verbose){
+  display('# states: ' + all_states.length)
+}
+
+var utts_to_remove = filter(function(u){
+  !any(function(s){meaning(u, s["table"], globalStore.thresholds)}, all_states)
+}, utterances)
+
+if(verbose){
+  display('# utts without corresponding state: ' + utts_to_remove.length)
+  display("removed utterances:")
+  map(display, utts_to_remove)
+}
+
+var utterances = filter(function(u){utts_to_remove.indexOf(u) == -1}, utterances)
+if(verbose){
+  display('# included utterances: ' + utterances.length)
+}
+
+utterances

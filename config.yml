@@ -1,0 +1,123 @@
+default:
+  dir_data: "data"
+  fn_cleaned_data: "cleaned-data.csv"
+  dir_webppl_model: !expr paste("webppl-model", "default-model", sep = .Platform$file.sep)
+  dir_model_input: "data"
+  dir_wppl_code: "webppl-model"
+  fn_rsa_model: "default-model.wppl"
+  fn_rsa_single_run: "model-single-run.wppl"
+  fn_gen_utts: "utterances.wppl"
+  fn_results: "results-speaker.rds"
+  fn_params: "params-speaker.rds"
+  generate_utterances: false
+  save: true
+  cost_conditional: 0
+  cost_conjunction: 0
+  cost_literal: 0
+  cost_might: 0
+  alpha: 3
+  gamma: 1
+  theta: 0.7
+  theta_might: 0
+  n_forward_samples: 1000
+  verbose: true
+  cns: !expr c("A implies C", "C implies A", "A implies -C", "C implies -A", "A || C")
+  #dir_packages: !expr c(paste("webppl-model", "node_modules", sep = .Platform$file.sep))
+  packages:  !expr c(paste("webppl-model", "node_modules", 
+                           "conditionalsHelpers", sep = .Platform$file.sep),
+                     paste("webppl-model", "node_modules", 
+                           "conditionalsDefault", sep = .Platform$file.sep),
+                     paste("webppl-model", "node_modules", 
+                           "conditionalsModel", sep = .Platform$file.sep))
+  #seed_webppl: !expr as.numeric(Sys.time())
+  seed_webppl: 123467
+  vars: !expr c("A", "C")
+  level_max: "speaker"
+  # @arg utt: - if set to "p_delta" or "p_rooij", respective value must be
+  #           large (see in webppl file) for all states given to the speaker,
+  #           - if set to "" no condition, just sampled from prior as usual
+  utt: ""
+  n_samples: 0 # bns given by empirical tables
+
+
+cleaned_data:
+  fn_tbls_empiric_pids: "tables-empiric-pids.rds"
+  fn_tables_smooth: "pe_tables_smooth.csv"
+  fn_predictions_by_context: "predictions-by-context.csv"
+  fn_predictions_by_context_chunked: "predictions-by-context-chunked.csv"
+  fn_joint_results: "exact-model-behavioral-predictions.csv"
+
+  
+recleaned_data:
+  fn_tbls_empiric_pids: "tables-empiric-pids-recleaned.rds"
+  fn_tables_smooth: "pe_tables_smooth_recleaned.csv"
+  fn_predictions_by_context: "predictions-by-context-recleaned.csv"
+  fn_predictions_by_context_chunked: "predictions-by-context-chunked-recleaned.csv"
+  fn_joint_results: "exact-model-behavioral-predictions-recleaned.csv"
+  fn_recleaned_data: "recleaned-data.csv"
+
+
+
+abstract_state_prior:
+  dir_results: !expr paste("results", "abstract-prior", sep=.Platform$file.sep)
+  fn_tables: "tables-abstract-prior-toWPPL.rds"
+  fn_tables_with_empiric: "tables-abstract-prior-toWPPL-with-empirical.rds"
+  fn_params_tables: "params-tables-abstract-prior.rds"
+  fn_utterances: "utterances-abstract-prior.rds"
+  fn_tables_mapping: "mapping-tables-abstract-prior-ids.rds"
+  fn_uniq_tables: "tables-abstract-prior-unique-toWPPL.rds"
+  #n_best_latent: 3
+  seed_tables: 202008
+  n_ind_tables: 6000
+  n_dep_tables: 1500
+  indep_sigma: 0.005
+  beta_neg_a: 1
+  beta_neg_b: 10
+  beta_pos_a: 10
+  beta_pos_b: 1
+  beta_marg_a: 1
+  beta_marg_b: 1
+  
+abstract_default_params:
+  inherits: abstract_state_prior
+  noise_shape1: 1
+  noise_shape2: 10
+  causal_power_shape1: 10
+  causal_power_shape2: 1
+  conditional_probs: !expr tibble::tribble(~grp, ~variable, ~shape1, ~shape2,
+                                           "high", "causal_power", 10, 1,
+                                           "high", "noise", 10, 1,
+                                           "high", "p_dep_pos", 10, 1,
+                                           "unc", "causal_power", 5, 5,
+                                           "unc", "noise", 5, 5,
+                                           "unc", "p_dep_pos", 5, 5,
+                                           "low", "causal_power", 1, 10,
+                                           "low", "noise", 1, 10,
+                                           "low", "p_dep_pos", 1, 10)
+  marginals: !expr  tibble::tribble(~grp, ~shape1, ~shape2,
+                                    "low", 1, 10,
+                                    "unc", 5, 5,
+                                    "high", 10, 1)
+  # causal nets
+  p_noise: !expr c("low")
+  p_cp: !expr c("high")
+  p_ant: !expr c("high", "low", "unc")
+  rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
+  p_a: !expr c("high", "low", "unc")
+  p_c: !expr c("high", "low", "unc")
+  
+situation_specific_prior:
+  dir_results: !expr paste("results", "dirichlet-prior", sep=.Platform$file.sep)
+  fn_tables: "tables-dirichlet-prior-toWPPL.rds"
+  fn_tables_with_empiric: "tables-dirichlet-prior-toWPPL-with-empirical.rds"
+  fn_params_tables: "params-tables-dirichlet-prior.rds"
+  fn_utterances: "utterances-dirichlet-prior.rds"
+  fn_tables_mapping: "mapping-tables-dirichlet-prior-ids.rds"
+  fn_uniq_tables: "tables-dirichlet-prior-unique-toWPPL.rds"
+  n_all_contexts: 13
+  fn_simulated_p_by_context: "simulated-p-values-fitted-dirichlet.csv"
+  fn_simulated_p_overall: "simulated-p-values-fitted-single-dirichlet.csv"
+  seed_fitted_tables: "20202020"
+
+
+# there needs to be 1 blank final line!
