@@ -1,0 +1,26 @@
+*.aux
+*.log
+*.blg
+*.bbl
+*.synctex*
+
+*.DS_Store
+
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+R/*.html
+*.html
+*.pdf
+model/R/figs/
+*.rds
+*.csv
+*.png
+*.history
+
+# do include index.html files
+!*index*.html
+
+code/results/*
