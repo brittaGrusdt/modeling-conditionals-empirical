@@ -110,23 +110,25 @@ empirical.context = data.observed %>% group_by(id, utterance) %>%
   summarize(n = n(), .groups = "drop_last") %>% 
   mutate(behavioral.p = n / sum(n))
 
-results.joint <- left_join(predictions.context, empirical.context)
-results.joint.utt_type <- results.joint %>% group_by(id, utt_type) %>% 
-  summarize(model = mean(model), behavioral.p = mean(behavioral.p)) %>% 
+results.joint <- left_join(predictions.context, empirical.context) %>% 
   mutate(across(where(is.numeric), ~ replace_na(.x, 0)))
+results.joint.utt_type <- results.joint %>% group_by(id, utt_type) %>% 
+  summarize(model = mean(model), behavioral.p = mean(behavioral.p))
 
-results.joint.utt_type %>% 
+p_scatter.types = results.joint.utt_type %>% 
   ggscatter(x = "behavioral.p", y = "model", add = "reg.line",
             conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson",
             xlab = "Empirical observations", ylab = "Model predictions") +
   geom_point(size=1.5, aes_string(x="behavioral.p", y="model", 
-                                  color="utt_type"))+ 
-  facet_wrap(~id)
+                                  color="utt_type"))
+p_scatter.types
+p_scatter.types + facet_wrap(~id)
 
-results.joint %>% 
+p_scatter.utts = results.joint %>% 
   ggscatter(x = "behavioral.p", y = "model", add = "reg.line",
             conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson",
             xlab = "Empirical observations", ylab = "Model predictions") +
-  geom_point(size=1.5, aes_string(x="behavioral.p", y="model", color="utterance"))+ 
-  facet_wrap(~id)
+  geom_point(size=1.5, aes_string(x="behavioral.p", y="model", color="utterance"))
+p_scatter.utts
+p_scatter.utts + facet_wrap(~id)
 
