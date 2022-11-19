@@ -1,4 +1,9 @@
 globalStore.n_prior_samples = data["n_forward_samples"][0]
 
-var distributions = {"prior":  state_prior()}
+var name = data["name"][0]
+
+var prior = name == "abstract-state-prior" ? state_prior() :
+            name == "dirichlet-prior" ? dirichlet_prior(data["alphas"]) :
+            error("prior " + name + " not defined!");
+var distributions = {"prior":  prior}
 distributions

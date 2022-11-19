@@ -7,8 +7,6 @@ library(ModelUtils)
 
 # Setup -------------------------------------------------------------------
 # Priors
-# active_config = "situation_specific_prior"
-# active_config = "abstract_state_prior"
 active_config = "abstract_default_params"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 
@@ -92,17 +90,30 @@ frequencies.observed = data.joint %>%
   dplyr::select(prolific_id, id, observed, observed.type) %>% distinct() %>% 
   group_by(id, observed) %>% 
   summarize(n = n(), .groups = "drop_last") %>% 
-  mutate(empirical = n / sum(n)) %>% rename(utterance = observed)
+  mutate(behavioral = n / sum(n)) %>% rename(utterance = observed)
 
 freq.joint <- left_join(frequencies.predicted, frequencies.observed, 
                         by = c("id", "utterance")) %>%
-  mutate(across(where(is.numeric), ~ replace_na(.x, 0)))
+  mutate(across(where(is.numeric), ~ replace_na(.x, 0)),
+         utt = utterance) %>% 
+  chunk_utterances() %>% rename(utt_type = utterance, utterance = utt)
 
-freq.joint.long <- freq.joint %>% dplyr::select(-n) %>% 
-  pivot_longer(cols = c(model, empirical), names_to="predictor", values_to="p") 
+# freq.joint.long <- freq.joint %>% dplyr::select(-n) %>% 
+#   pivot_longer(cols = c(model, behavioral), names_to="predictor", values_to="p") 
 
-
+freq.joint.types = freq.joint %>% group_by(id, utt_type) %>% 
+  summarize(model = sum(model), behavioral = sum(behavioral),
+            .groups = "drop_last") %>% rename(utterance = utt_type)
 # Some plots --------------------------------------------------------------
+p = plot_correlation(freq.joint)
+p + facet_wrap(~utterance)
+
+p.types = plot_correlation(freq.joint.types)
+p.types + facet_wrap(~utterance)
+
+
+
+
 # most likely prediction = observed utterance / utterance type?
 df.most_likely_prediction = data.joint %>% filter(p_hat == max(p_hat)) %>% 
   mutate(correct_utt = predicted == observed, 

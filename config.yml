@@ -10,6 +10,11 @@ default:
   fn_results: "results-speaker.rds"
   fn_params: "params-speaker.rds"
   generate_utterances: false
+  states_presampled: true
+  utterances: !expr c("-A", "A", "-C", "C", "-C and -A", "-C and A", "C and -A", 
+                      "C and A", "might -A", "might A", "might -C", "might C", 
+                      "A > C", "C > A", "A > -C", "-C > A", "-A > C", "C > -A",
+                      "-A > -C", "-C > -A") 
   save: true
   cost_conditional: 0
   cost_conjunction: 0
@@ -80,6 +85,7 @@ abstract_state_prior:
   
 abstract_default_params:
   inherits: abstract_state_prior
+  name: "abstract-state-prior"
   noise_shape1: 1
   noise_shape2: 10
   causal_power_shape1: 10
@@ -105,19 +111,14 @@ abstract_default_params:
   rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
   p_a: !expr c("high", "low", "unc")
   p_c: !expr c("high", "low", "unc")
+  fn_kl_divergences: "best-kl-divergences.csv"
+
+
+
+context_sensitive_prior:
+  dir_results: !expr paste("results", "context-sensitive-prior", sep=.Platform$file.sep)
+  name: "dirichlet-prior"
+  fn_fitted_alphas: "params-fitted-single-dirichlet.csv"
+  fn_fitted_alphas_by_context: "params-fitted-dirichlet.csv"
   
-situation_specific_prior:
-  dir_results: !expr paste("results", "dirichlet-prior", sep=.Platform$file.sep)
-  fn_tables: "tables-dirichlet-prior-toWPPL.rds"
-  fn_tables_with_empiric: "tables-dirichlet-prior-toWPPL-with-empirical.rds"
-  fn_params_tables: "params-tables-dirichlet-prior.rds"
-  fn_utterances: "utterances-dirichlet-prior.rds"
-  fn_tables_mapping: "mapping-tables-dirichlet-prior-ids.rds"
-  fn_uniq_tables: "tables-dirichlet-prior-unique-toWPPL.rds"
-  n_all_contexts: 13
-  fn_simulated_p_by_context: "simulated-p-values-fitted-dirichlet.csv"
-  fn_simulated_p_overall: "simulated-p-values-fitted-single-dirichlet.csv"
-  seed_fitted_tables: "20202020"
-
-
 # there needs to be 1 blank final line!
