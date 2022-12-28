@@ -4,6 +4,7 @@ default:
   dir_webppl_model: !expr paste("webppl-model", "default-model", sep = .Platform$file.sep)
   dir_model_input: "data"
   dir_wppl_code: "webppl-model"
+  dir_presampled_states: "presampled-states"
   fn_rsa_model: "default-model.wppl"
   fn_rsa_single_run: "model-single-run.wppl"
   fn_gen_utts: "utterances.wppl"
@@ -63,29 +64,31 @@ recleaned_data:
 
 
 
-abstract_state_prior:
-  dir_results: !expr paste("results", "abstract-prior", sep=.Platform$file.sep)
-  fn_tables: "tables-abstract-prior-toWPPL.rds"
-  fn_tables_with_empiric: "tables-abstract-prior-toWPPL-with-empirical.rds"
-  fn_params_tables: "params-tables-abstract-prior.rds"
-  fn_utterances: "utterances-abstract-prior.rds"
-  fn_tables_mapping: "mapping-tables-abstract-prior-ids.rds"
-  fn_uniq_tables: "tables-abstract-prior-unique-toWPPL.rds"
-  #n_best_latent: 3
-  seed_tables: 202008
-  n_ind_tables: 6000
-  n_dep_tables: 1500
-  indep_sigma: 0.005
-  beta_neg_a: 1
-  beta_neg_b: 10
-  beta_pos_a: 10
-  beta_pos_b: 1
-  beta_marg_a: 1
-  beta_marg_b: 1
-  
-abstract_default_params:
-  inherits: abstract_state_prior
-  name: "abstract-state-prior"
+# abstract_state_prior:
+#   dir_results: !expr paste("results", "abstract-prior", sep=.Platform$file.sep)
+#   fn_tables: "tables-abstract-prior-toWPPL.rds"
+#   fn_tables_with_empiric: "tables-abstract-prior-toWPPL-with-empirical.rds"
+#   fn_params_tables: "params-tables-abstract-prior.rds"
+#   fn_utterances: "utterances-abstract-prior.rds"
+#   fn_tables_mapping: "mapping-tables-abstract-prior-ids.rds"
+#   fn_uniq_tables: "tables-abstract-prior-unique-toWPPL.rds"
+#   #n_best_latent: 3
+#   seed_tables: 202008
+#   n_ind_tables: 6000
+#   n_dep_tables: 1500
+#   indep_sigma: 0.005
+#   beta_neg_a: 1
+#   beta_neg_b: 10
+#   beta_pos_a: 10
+#   beta_pos_b: 1
+#   beta_marg_a: 1
+#   beta_marg_b: 1
+
+context_free_prior:
+  dir_results: !expr paste("results", "context-free-prior", sep=.Platform$file.sep)
+#abstract_default_params:
+  #inherits: abstract_state_prior
+  name: "context-free-prior"
   noise_shape1: 1
   noise_shape2: 10
   causal_power_shape1: 10
@@ -111,13 +114,20 @@ abstract_default_params:
   rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
   p_a: !expr c("high", "low", "unc")
   p_c: !expr c("high", "low", "unc")
-  fn_kl_divergences: "best-kl-divergences.csv"
+  fn_kl_divergences: "best-kl-divergences.rds"
 
+cf_prior_match_tables:
+  inherits: context_free_prior
+  match_by: "tables"
+
+cf_prior_match_kl:
+  inherits: context_free_prior
+  match_by: "KL-divergence"
 
 
 context_sensitive_prior:
   dir_results: !expr paste("results", "context-sensitive-prior", sep=.Platform$file.sep)
-  name: "dirichlet-prior"
+  name: "context-sensitive-prior"
   fn_fitted_alphas: "params-fitted-single-dirichlet.csv"
   fn_fitted_alphas_by_context: "params-fitted-dirichlet.csv"
   

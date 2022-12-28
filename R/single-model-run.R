@@ -5,9 +5,11 @@ library(tibble)
 library(ExpDataWrangling)
 library(ModelUtils)
 
+source(here("R", "plot-functions.R"))
+
 # Setup -------------------------------------------------------------------
 # Priors
-active_config = "abstract_default_params"
+active_config = "context_free_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 
 params <- config::get()
@@ -23,16 +25,6 @@ cns = create_causal_nets(params$p_noise, params$p_cp, params$p_ant,
                          params$rels_dep, params$p_a, params$p_c)
 params$causal_nets_dep = cns$dep
 params$causal_nets_ind = cns$ind
-
-## Generate/Retrieve utterances
-path_utterances = here(params$dir_model_input, params$fn_utterances)
-if(params$generate_utterances || !file.exists(path_utterances)){
-  utterances <- generate_utts(params, path_to_target = path_utterances)
-} else {
-  utterances <- readRDS(path_utterances)
-  print(paste("utterances read from:", path_utterances))
-}
-params$utterances <- utterances
 
 # behavioral data
 data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
@@ -95,13 +87,15 @@ frequencies.observed = data.joint %>%
 freq.joint <- left_join(frequencies.predicted, frequencies.observed, 
                         by = c("id", "utterance")) %>%
   mutate(across(where(is.numeric), ~ replace_na(.x, 0)),
-         utt = utterance) %>% 
-  chunk_utterances() %>% rename(utt_type = utterance, utterance = utt)
+         utt = utterance, stimulus = id) %>% 
+  chunk_utterances() %>% rename(utt_type = utterance, utterance = utt) %>% 
+  separate("stimulus", into = c("relation", "prior"), sep = "_") %>% 
+  dplyr::select(-prior)
 
 # freq.joint.long <- freq.joint %>% dplyr::select(-n) %>% 
 #   pivot_longer(cols = c(model, behavioral), names_to="predictor", values_to="p") 
 
-freq.joint.types = freq.joint %>% group_by(id, utt_type) %>% 
+freq.joint.types = freq.joint %>% group_by(id, relation, utt_type) %>% 
   summarize(model = sum(model), behavioral = sum(behavioral),
             .groups = "drop_last") %>% rename(utterance = utt_type)
 # Some plots --------------------------------------------------------------
@@ -109,7 +103,7 @@ p = plot_correlation(freq.joint)
 p + facet_wrap(~utterance)
 
 p.types = plot_correlation(freq.joint.types)
-p.types + facet_wrap(~utterance)
+p.types
 
 
 

@@ -70,7 +70,7 @@ compute_kl_divergences = function(tbls.model, tbls.empiric, n_best = 10){
     dplyr::select(AC, `A-C`, `-AC`, `-A-C`) %>% 
     as.matrix()
   kl.D = map_dfr(seq(1, nrow(tbls.empiric)), function(idx.empiric){
-    print(paste("subj no", idx.empiric))
+    print(paste("trial no", idx.empiric))
     kl.dij = map_dfr(seq(1, nrow(tbls.model)), function(idx.model){
       kl_wrapper(rbind(tbls.empiric[idx.empiric,
                                     c('AC', 'A-C', '-AC', '-A-C')] %>% as.numeric(),
