@@ -12,7 +12,8 @@ source(here("R", "prediction-functions.R"))
 # Runs default-model
 # Setup -------------------------------------------------------------------
 # Prior
-active_config = "abstract_default_params"
+# active_config = "cf_prior_match_tables"
+active_config = "cf_prior_match_kl"
 # active_config = "context_sensitive_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
@@ -44,9 +45,24 @@ empirical.context = data.observed %>% group_by(id, utterance) %>%
   summarize(n = n(), .groups = "drop_last") %>% 
   mutate(behavioral = n / sum(n))
 
-# set states
+# set states if presampled by running prior once before running model
+dir_presampled_states = here(params$dir_data, params$name, 
+                             params$dir_presampled_states)
+if(!dir.exists(dir_presampled_states)) {
+  dir.create(dir_presampled_states, recursive = T)
+} 
+fn_presampled_states = paste("states-", params$seed_webppl, ".rds", sep="")
+fn_kl_divs =  paste("KL-divergences-", params$seed_webppl, ".rds", sep="")
+path_presampled = paste(dir_presampled_states, fn_presampled_states, sep = FS)
+path_kl_divs <- paste(dir_presampled_states, fn_kl_divs, sep = FS)
+
 if(params$states_presampled){
-  states = generate_model_states(active_config)
+  if(!file.exists(path_presampled)) {
+    states = generate_model_states(active_config)
+    save_data(states, path_presampled)
+  } else {
+    states <- readRDS(path_presampled)
+  }
   params$prior_samples <- states
 }
 
@@ -72,60 +88,76 @@ if(params$states_presampled) {
 }
 
 # Model Predictions -------------------------------------------------------
-# Predictions by Relation (for Dirichlet) ---------------------------------
-# for context-sensitive matching is not needed: the tables were sampled from 
-# Dirichlet distributions fitted to participants' data for each context
-predictions.context = predictions_by_relation(speaker)
+# --- Predictions by Relation (for Dirichlet) ---
+if(active_config == "context_sensitive_prior") {
+  # for context-sensitive prior, matching is not needed: the tables were sampled
+  # from Dirichlet distributions fitted to participants' data for each context
+  predictions.context = predictions_by_relation(speaker) %>% 
+    rename(id = r)
 
-# Predictions by matching tables ------------------------------------------
-df.predictions = predictions_by_matching_tables(speaker, tables.model, path_empiric_tbls_ids)
-predictions.context = df.predictions$predictions
-df.matches <- df.predictions$matches
-# Check matched tables: how many trials were matched? (i.e. taken into account)
-n_trials.match = df.matches %>% group_by(subject_id) %>% dplyr::count() %>% 
-  arrange(desc(n)) %>% pull(n) %>% sum()
-n_trials.all = nrow(data.uc)
-n_trials.match / n_trials.all
+} else if(active_config == "cf_prior_match_tables") {
+  # --- Predictions by matching tables ---
+  df.predictions = predictions_by_matching_tables(speaker, tables.model, 
+                                                  path_empiric_tbls_ids)
+  predictions.context = df.predictions$predictions
+  df.matches <- df.predictions$matches
+  # Check matched tables: how many trials were matched? (i.e.taken into account)
+  n_trials.match = df.matches %>% group_by(subject_id) %>% dplyr::count() %>% 
+    arrange(desc(n)) %>% pull(n) %>% sum()
+  n_trials.all = nrow(data.uc)
+  print(n_trials.match / n_trials.all)
 
-
-# Predictions based on states with lowest KL-divergences -------------------
-tbls.empiric <- data.pe %>% 
-  dplyr::select(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`)
-kl.divergences = compute_kl_divergences(tables.model, tbls.empiric)
-save_data(kl.divergences, here(params$dir_results, 
-                               params$fn_kl_divergences))
-
-predictions.context = left_join(kl.divergences %>% filter(idx == 1), 
-                                speaker) %>% 
-  group_by(id, utterance) %>% 
-  summarize(model = mean(probs), .groups = "drop_last") %>% 
-  arrange(desc(model))
-
-tbls.most_similar = left_join(
-  data.pe %>% dplyr::select(c(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`)),
-  kl.divergences %>% 
-    dplyr::select(c(prolific_id, id, AC.match, `A-C.match`, 
-                    `-AC.match`, `-A-C.match`, `kl.div`, idx))
-) %>% 
-  mutate(AC = round(AC, 2), 
-         `A-C` = round(`A-C`, 2), 
-         `-AC` = round(`-AC`, 2), 
-         `-A-C` = round(`-A-C`, 2),
-         AC.match = round(as.numeric(AC.match), 2), 
-         `A-C.match` = round(as.numeric(`A-C.match`), 2), 
-         `-AC.match` = round(as.numeric(`-AC.match`), 2), 
-         `-A-C.match` = round(as.numeric(`-A-C.match`), 2))
-
-# worst matches of best matches:
-tbls.most_similar %>% filter(idx == 1) %>% arrange(desc(kl.div))
-
+} else if(active_config == "cf_prior_match_kl") {
+  # --- Predictions based on states with lowest KL-divergences ---
+  tbls.empiric <- data.pe %>% 
+    dplyr::select(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`)
+  if(!file.exists(path_kl_divs)) {
+    kl.divergences = compute_kl_divergences(tables.model, tbls.empiric)
+    save_data(kl.divergences, path_kl_divs)
+  } else {
+    kl.divergences <- readRDS(path_kl_divs)
+  } 
+  
+  predictions.context = left_join(kl.divergences %>% filter(idx == 1), 
+                                  speaker) %>% 
+    group_by(id, utterance) %>% 
+    summarize(model = mean(probs), .groups = "drop_last") %>% 
+    arrange(desc(model)) %>% 
+    mutate(utt = utterance) %>% 
+    chunk_utterances() %>% 
+    rename(utt_type = utterance, utterance = utt)
+  
+  
+  tbls.most_similar = left_join(
+    data.pe %>% dplyr::select(c(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`)),
+    kl.divergences %>% 
+      dplyr::select(c(prolific_id, id, AC.match, `A-C.match`, 
+                      `-AC.match`, `-A-C.match`, `kl.div`, idx))
+  ) %>% 
+    mutate(AC = round(AC, 2), 
+           `A-C` = round(`A-C`, 2), 
+           `-AC` = round(`-AC`, 2), 
+           `-A-C` = round(`-A-C`, 2),
+           AC.match = round(as.numeric(AC.match), 2), 
+           `A-C.match` = round(as.numeric(`A-C.match`), 2), 
+           `-AC.match` = round(as.numeric(`-AC.match`), 2), 
+           `-A-C.match` = round(as.numeric(`-A-C.match`), 2))
+  
+  # worst matches of best matches:
+  tbls.most_similar %>% filter(idx == 1) %>% arrange(desc(kl.div))
+}
 
 # Joint data empirical + model --------------------------------------------
 results.joint <- left_join(predictions.context, empirical.context) %>% 
-  mutate(across(where(is.numeric), ~ replace_na(.x, 0)))
-results.joint.utt_type <- results.joint %>% group_by(id, utt_type) %>% 
-  summarize(model = mean(model), behavioral = mean(behavioral))
-
+  mutate(across(where(is.numeric), ~ replace_na(.x, 0)),
+         stimulus = id) %>% 
+  separate("stimulus", into = c("relation", "prior"), sep = "_") %>% 
+  dplyr::select(-prior)
+  
+results.joint.utt_type <- results.joint %>% 
+  group_by(id, relation, utt_type) %>% 
+  summarize(model = sum(model), behavioral = sum(behavioral),
+            .groups = "keep")
 
 
 # Results -----------------------------------------------------------------
@@ -133,14 +165,13 @@ predictions.context %>% filter(id == "if1_uh")
 predictions.context %>% filter(id == "independent_uh")
 
 # plots
-p_scatter.types = plot_correlation(results.joint.utt_type %>% 
-                                     rename(utterance = utt_type))
+grp_var = "utterance"
+p_scatter.types = plot_correlation(
+  results.joint.utt_type %>% rename(utterance = utt_type),
+  color = grp_var
+)
 p_scatter.types
-p_scatter.types + facet_wrap(~id)
 
-p_scatter.utts = plot_correlation(results.joint)
-p_scatter.utts
-p_scatter.utts + facet_wrap(~id)
-
-
+p_scatter.utts = plot_correlation(results.joint, label.y = 0.3, color=grp_var) 
+p_scatter.utts + facet_wrap(as.formula(paste("~", grp_var)))
 
