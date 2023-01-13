@@ -1,0 +1,49 @@
+var observed_ratings = data["probs"]
+var samples_posterior = data["samples_posterior"]
+
+var samples_beta = zip(samples_posterior.shape1, samples_posterior.shape2)
+var samples_other_par = zip(samples_posterior.alpha, samples_posterior.gamma)
+
+var get_likelihood_fn = function(cat, gamma, par_beta) {
+ return(cat == "01" ? Bernoulli({p: gamma}) : Beta({a: par_beta[0], b: par_beta[1]}))
+}
+
+var posterior_predictive = map2(function(par_beta, alpha_gamma){
+
+  // likelihood functions given posterior samples of Parameters
+  var alpha = alpha_gamma[0]
+  var gamma = alpha_gamma[1]
+
+  var likelihood_fn_cat = Categorical({vs: ["01", "Beta"], ps: [alpha, 1-alpha]})
+
+  // sample new data from posterior
+  var X_new = map(function(i) {
+    var cat_new = sample(likelihood_fn_cat)
+    var likelihood_fn = get_likelihood_fn(cat_new, gamma, par_beta)
+    var x_new = sample(likelihood_fn)
+
+    var ll_new = likelihood_fn_cat.score(cat_new) + likelihood_fn.score(x_new)
+
+    return({x: x_new, ll_x: ll_new})
+  }, _.range(0, observed_ratings.length))
+
+  var ll_X_new = sum(_.map(X_new, 'll_x'))
+
+  // observed values
+  var ll_x_obs = map(function(p_obs){
+    var cat_obs = p_obs == 0 || p_obs == 1 ? "01" : "Beta";
+    var likelihood_fn_obs = get_likelihood_fn(cat_obs, gamma, par_beta)
+    var ll = likelihood_fn_cat.score(cat_obs) +
+      likelihood_fn_obs.score(p_obs == 1 ? true : p_obs == 0 ? false : p_obs)
+    return(ll)
+  }, observed_ratings)
+
+  var ll_X_obs = sum(ll_x_obs)
+
+  //return(ll_X_obs)
+  return(ll_X_new)
+  //return(_.map(X_new, 'x'))
+
+}, samples_beta, samples_other_par)
+
+posterior_predictive

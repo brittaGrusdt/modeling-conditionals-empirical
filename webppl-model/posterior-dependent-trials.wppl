@@ -1,0 +1,35 @@
+// Retrieve data from R
+var observed_ratings = data["probs"]
+
+var exponentialKernel = function(prevVal) {
+  var lambda = 1 / prevVal;
+  return Exponential({a: lambda});
+};
+
+// specify model
+var non_normalized_posterior = function(){
+
+  // draws from prior
+  var shape1 = sample(Exponential({a: 0.5}), {driftKernel: exponentialKernel})
+  var shape2 = sample(Exponential({a: 0.5}), {driftKernel: exponentialKernel})
+  var gamma = uniformDrift({a: 0, b:1, width: 0.1})
+  var alpha = uniformDrift({a: 0, b:1, width: 0.1})
+
+  var ll = reduce(function(obs, acc){
+    var obs_cat = obs.p == 0 || obs.p == 1 ? "01" : "Beta";
+    var ll_cat = Categorical({vs: ["01", "Beta"], ps: [alpha, 1-alpha]}).score(obs_cat)
+    var ll_obs = (obs.p == 0 || obs.p == 1) ?
+      Bernoulli({p: gamma}).score(obs.p == 1 ? true : false) :
+      Beta({a: shape1, b:shape2}).score(obs.p);
+    var ll_x = ll_cat + ll_obs
+    //display(ll_x)
+    return(acc + ll_obs + ll_x)
+ }, 0, observed_ratings)
+
+ //display(ll)
+ factor(ll)
+
+ return({shape1, shape2, gamma, alpha})
+}
+
+non_normalized_posterior

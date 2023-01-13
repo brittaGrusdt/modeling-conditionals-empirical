@@ -90,6 +90,8 @@ context_free_prior:
 #abstract_default_params:
   #inherits: abstract_state_prior
   name: "context-free-prior"
+  fit_ind_prior_mu: !expr list(mu = 0, sigma = 1, width = 0.01)
+  fit_ind_prior_sigma: !expr list(a = 0, b = 0.5, width = 0.01)
   noise_shape1: 1
   noise_shape2: 10
   causal_power_shape1: 10
@@ -132,5 +134,5 @@ context_sensitive_prior:
   name: "context-sensitive-prior"
   fn_fitted_alphas: "params-fitted-single-dirichlet.csv"
   fn_fitted_alphas_by_context: "params-fitted-dirichlet.csv"
-  
+
 # there needs to be 1 blank final line!

@@ -1,0 +1,30 @@
+// Retrieve data from R
+var observed_ratings = data["probs"]
+var prior_mu = data["prior_mu"]
+var prior_sigma = data["prior_sigma"]
+
+// specify model
+var non_normalized_posterior = function(){
+
+  // draws from prior
+  // use drift distributions to tune the width of the gaussian proposal distribution
+  var params = {
+    // remember to indexed by [0], otherwise type is wrong and program wont run
+    mu: gaussianDrift({mu: prior_mu.mu[0], sigma: prior_mu.sigma[0], width: prior_mu.width[0]}),
+    sigma: uniformDrift({a: prior_sigma.a[0], b: prior_sigma.b[0], width: prior_sigma.width[0]})
+  }
+
+  // log likelihood
+  var likelihood_fn = Gaussian({mu: params.mu, sigma: params.sigma})
+
+  var ll = reduce(function(obs, acc){
+    var ll_obs = likelihood_fn.score(obs)
+   return(acc + ll_obs)
+ }, 0, observed_ratings)
+
+  factor(ll)
+
+  return(params)
+}
+
+non_normalized_posterior

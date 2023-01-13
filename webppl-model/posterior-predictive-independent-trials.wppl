@@ -1,0 +1,29 @@
+var observed_ratings = data["probs"]
+var samples_posterior = data["samples_posterior"]
+
+var posterior_predictive = map2(function(mu, sigma){
+
+  // log likelihood
+  var likelihood_fn = Gaussian({"mu": mu, "sigma": sigma})
+
+  // var ll = reduce(function(obs, acc){
+  //   var ll_obs = likelihood_fn.score(obs)
+  //   return(acc + ll_obs)
+  // }, 0, observed_ratings)
+
+  // sample new data from posterior
+  var X_new = map(function(i) {
+    var x_new = sample(likelihood_fn)
+    //return(x_new)
+    var ll_new = likelihood_fn.score(x_new)
+    return({x: x_new, ll_x: ll_new})
+  }, _.range(0, observed_ratings.length))
+
+  var ll_X_new = sum(_.map(X_new, 'll_x'))
+
+  //return(ll_X_new)
+  return(_.map(X_new, 'x'))
+
+}, samples_posterior.mu, samples_posterior.sigma)
+
+posterior_predictive
