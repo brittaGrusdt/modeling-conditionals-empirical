@@ -74,37 +74,54 @@ subjs.weights = group_map(data.pe %>% group_by(id), function(df, df.grp){
     # weights = weights.all %>% filter(cdf <= 0.999)
     return(weights.all)
   }) %>% bind_rows()
-}) %>% bind_rows() %>% group_by(prolific_id, id)
+}) %>% bind_rows() %>% group_by(prolific_id, id) %>% 
+  mutate(cn = paste(r, probability, sep = "_")) %>% 
+  arrange(desc(probs))
 
 modeled_r = subjs.weights$r %>% unique()
+modeled_cn = subjs.weights %>% ungroup() %>% dplyr::select(cn) %>% distinct() %>% pull(cn)
+modeled_bn_ids = subjs.weights %>% ungroup() %>% dplyr::select(bn_id) %>%
+  distinct() %>% pull(bn_id)
 
 data_pe.weights = left_join(
   data.pe %>% ungroup() %>% 
     dplyr::select(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`) %>% 
-    mutate(r = list(modeled_r)) %>% unnest(cols = c(r)),
-  subjs.weights 
-) %>% mutate(probs = case_when(is.na(probs) ~ 0, T ~ probs))
+    # mutate(cn = list(modeled_cn)) %>% unnest(cols = c(cn)),
+    mutate(bn_id = list(modeled_bn_ids)) %>% unnest(cols = c(bn_id)),
+  subjs.weights %>% dplyr::select(prolific_id, id, bn_id, probs)
+) %>% 
+  mutate(probs = case_when(is.na(probs) ~ 0, T ~ probs)) %>% 
+  mutate(bn_id.tmp = bn_id) %>% 
+  separate(bn_id.tmp, into = c("r", "probability", "t1", "t2", "t3", "t4"), sep = "_") %>% 
+  dplyr::select(-t1, -t2, -t3, -t4)
 
 data.weights = left_join(
   data_pe.weights, 
   data.uc %>% dplyr::select(prolific_id, id, utterance)
 ) %>% rename(uc_task = utterance)
 
-p_r_Dij = data.weights %>% 
-  group_by(prolific_id, id, r, AC, `A-C`, `-AC`, `-A-C`, uc_task) %>% 
-  summarize(p = sum(probs), .groups = "drop") %>%
-  group_by(prolific_id, id) %>% 
-  arrange(desc(p)) %>% 
+# cn: r + probability
+p_cn_Dij = data.weights %>% 
+  group_by(prolific_id, id, r, AC, `A-C`, `-AC`, `-A-C`, uc_task, probability) %>% 
+  summarize(p = sum(probs), .groups = "drop_last") %>% 
   mutate(r = case_when(r == "A implies C" ~ "A -> C", 
                        r == "-A implies C" ~ "-A -> C",
                        r == "C implies A" ~ "C -> A",
                        r == "-C implies A" ~ "- C-> A",
-                       r == "A || C" ~ "ind"))
+                       r == "A || C" ~ "ind")) %>% 
+  arrange(desc(p))
+p_r_Dij = p_cn_Dij %>% summarize(p = sum(p), .groups = "drop") %>% 
+  group_by(prolific_id, id) %>% 
+  arrange(desc(p)) 
 
 # plot posterior P(r|D_ij) for all subjects, mark average posterior P(r|D_ij) 
 # for each context i
+p_cn_Di.avg = p_cn_Dij %>% group_by(id, r, probability) %>% 
+  summarize(p = mean(p), .groups = "drop_last") %>% 
+  arrange(desc(p))
 p_r_Di.avg = p_r_Dij %>% group_by(id, r) %>% 
   summarize(p = mean(p), .groups = "drop_last")
+
 plot.posterior_r = p_r_Dij %>%
   ggplot(aes(x = r, y = p)) +
   geom_point(aes(group = prolific_id)) + geom_line(aes(group = prolific_id)) + 
@@ -164,8 +181,8 @@ p + facet_wrap(~utterance)
 p.types = plot_correlation(freq.joint.types)
 p.types
 
-
-
+plot_correlation(freq.joint, color = "id") + facet_wrap(~id)
+plot_correlation(freq.joint.types, color = "id") + facet_wrap(~id)
 
 # most likely prediction = observed utterance / utterance type?
 df.most_likely_prediction = data.joint %>% filter(p_hat == max(p_hat)) %>% 
