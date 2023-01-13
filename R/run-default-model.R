@@ -145,7 +145,16 @@ if(active_config == "context_sensitive_prior") {
   
   # worst matches of best matches:
   tbls.most_similar %>% filter(idx == 1) %>% arrange(desc(kl.div))
+  tbls.most_similar %>% filter(idx == 1) %>% pull(kl.div) %>% summary()
+  
+  p <- tbls.most_similar %>% 
+    mutate(states = case_when(idx == 1 ~ "most similar",
+                              T ~ "other")) %>% 
+    ggplot(aes(x=kl.div)) + geom_density(aes(color = states)) +
+    labs(x = "KL-divergence") + theme(legend.position = "top")
 }
+
+
 
 # Joint data empirical + model --------------------------------------------
 results.joint <- left_join(predictions.context, empirical.context) %>% 

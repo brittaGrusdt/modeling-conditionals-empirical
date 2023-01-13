@@ -7,6 +7,7 @@ default:
   dir_presampled_states: "presampled-states"
   fn_rsa_model: "default-model.wppl"
   fn_rsa_single_run: "model-single-run.wppl"
+  fn_get_weights: "weights-subj-trial.wppl"
   fn_gen_utts: "utterances.wppl"
   fn_results: "results-speaker.rds"
   fn_params: "params-speaker.rds"
@@ -106,7 +107,8 @@ context_free_prior:
   marginals: !expr  tibble::tribble(~grp, ~shape1, ~shape2,
                                     "low", 1, 10,
                                     "unc", 5, 5,
-                                    "high", 10, 1)
+                                    "high", 10, 1,
+                                    "unif", 1, 1)
   # causal nets
   p_noise: !expr c("low")
   p_cp: !expr c("high")

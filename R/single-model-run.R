@@ -54,10 +54,69 @@ prior <- webppl(program_file = here("webppl-model", "run-state-prior.wppl"),
 states = prior$prior$support %>% as_tibble()
 params$prior_samples = states
 
-# single model run
-path_model_file = paste(params$dir_wppl_code, params$fn_rsa_single_run, sep=FS)
 params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
 
+# Analyze weights ---------------------------------------------------------
+path_model_weights = paste(params$dir_wppl_code, params$fn_get_weights, sep=FS)
+weights = run_webppl(path_model_weights, params)
+
+subjs.weights = group_map(data.pe %>% group_by(id), function(df, df.grp){
+  trial.id = df.grp$id
+  message(trial.id)
+  weights.id = weights[[trial.id]][]
+  map_dfr(df$prolific_id, function(subj){
+    weights.all = weights.id[[subj]] %>% as_tibble() %>% 
+      unnest(cols = c(support)) %>% 
+      dplyr::select(probs, r, probability, bn_id) %>% 
+      add_column(prolific_id = subj, id = trial.id) %>% 
+      arrange(desc(probs)) %>% rowid_to_column("idx") %>% 
+      mutate(cdf = cumsum(probs))
+    # weights = weights.all %>% filter(cdf <= 0.999)
+    return(weights.all)
+  }) %>% bind_rows()
+}) %>% bind_rows() %>% group_by(prolific_id, id)
+
+modeled_r = subjs.weights$r %>% unique()
+
+data_pe.weights = left_join(
+  data.pe %>% ungroup() %>% 
+    dplyr::select(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`) %>% 
+    mutate(r = list(modeled_r)) %>% unnest(cols = c(r)),
+  subjs.weights 
+) %>% mutate(probs = case_when(is.na(probs) ~ 0, T ~ probs))
+
+data.weights = left_join(
+  data_pe.weights, 
+  data.uc %>% dplyr::select(prolific_id, id, utterance)
+) %>% rename(uc_task = utterance)
+
+p_r_Dij = data.weights %>% 
+  group_by(prolific_id, id, r, AC, `A-C`, `-AC`, `-A-C`, uc_task) %>% 
+  summarize(p = sum(probs), .groups = "drop") %>%
+  group_by(prolific_id, id) %>% 
+  arrange(desc(p)) %>% 
+  mutate(r = case_when(r == "A implies C" ~ "A -> C", 
+                       r == "-A implies C" ~ "-A -> C",
+                       r == "C implies A" ~ "C -> A",
+                       r == "-C implies A" ~ "- C-> A",
+                       r == "A || C" ~ "ind"))
+
+# plot posterior P(r|D_ij) for all subjects, mark average posterior P(r|D_ij) 
+# for each context i
+p_r_Di.avg = p_r_Dij %>% group_by(id, r) %>% 
+  summarize(p = mean(p), .groups = "drop_last")
+plot.posterior_r = p_r_Dij %>%
+  ggplot(aes(x = r, y = p)) +
+  geom_point(aes(group = prolific_id)) + geom_line(aes(group = prolific_id)) + 
+  facet_wrap(~id, scales = "free_x") +
+  geom_point(data = p_r_Di.avg, color = "red")
+plot.posterior_r
+
+target_dir = here(params$dir_results)
+ggsave(paste(target_dir, "p_r_Dij.png", sep=FS), plot.posterior_r, 
+       width = 10, height = 6)
+# Run Model ---------------------------------------------------------------
+path_model_file = paste(params$dir_wppl_code, params$fn_rsa_single_run, sep=FS)
 posterior <- run_webppl(path_model_file, params)
 
 model_predictions <- posterior %>% 
