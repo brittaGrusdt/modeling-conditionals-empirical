@@ -79,7 +79,14 @@ compute_kl_divergences = function(tbls.model, tbls.empiric, n_best = 10){
         add_column(bn_id = tbls.model[idx.model, ]$bn_id)
     }) %>% arrange(kl.div) %>% 
       add_column(prolific_id = tbls.empiric[idx.empiric,]$prolific_id,
-                 id = tbls.empiric[idx.empiric,]$id)
+                 id = tbls.empiric[idx.empiric,]$id) %>% 
+      mutate(bn_id.tmp = bn_id) %>% 
+      separate("bn_id.tmp", into = c("r", "prior", "t1", "t2", "t3", "t4"), 
+               sep = "_") %>% dplyr::select(-t1, -t2, -t3, -t4)
+    
+    # single best for each causal relation
+    # return(kl.dij %>% group_by(r, prior) %>% filter(kl.div == min(kl.div)))
+    # n_best overall
     return(kl.dij[1:n_best,])
   }) %>% 
     mutate(temp = bn_id) %>% 
@@ -88,6 +95,8 @@ compute_kl_divergences = function(tbls.model, tbls.empiric, n_best = 10){
                             "-AC.match", "-A-C.match"), sep = "_")
   
   n_trials = kl.D %>% group_by(prolific_id, id) %>% n_groups()
+  # n_cns = kl.D %>% group_by(r, prior) %>% n_groups()
+  
   kl.D$idx = rep(seq(1, n_best), n_trials)
   kl.D 
   return(kl.D)
