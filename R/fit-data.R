@@ -10,6 +10,8 @@ library(ExpDataWrangling)
 library(ModelUtils)
 library(rwebppl)
 library(bayesplot)
+
+source(here("R", "fit-data-helper-functions.R"))
 # Data --------------------------------------------------------------------
 active_config = "context_free_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
@@ -44,6 +46,8 @@ df.gaussian = data.pe %>% dplyr::select(blue, green, AC, prolific_id, id) %>%
   filter(str_detect(id, "independent"))
 p.ind = df.gaussian %>% ggplot() + geom_density(aes(x=diff))
 
+
+# Fit by using Greta ------------------------------------------------------
 # 2. variables and priors
 mu = normal(0, 1)
 sd = uniform(0, 1)
@@ -58,6 +62,7 @@ draws <- mcmc(m, n_samples = 1000)
 mat <- data.frame(matrix(draws[[1]], ncol = 2))
 names(mat) <- c("mu", "sd")
 
+# 4. Plots
 # plot posterior P(mu|X)
 p.mu <- ggplot(mat, aes(x=mu)) + 
   geom_histogram(aes(y=..density..), binwidth=.0005, colour="black", 
@@ -74,12 +79,13 @@ fit <- opt(m)
 par.fit = tibble(mu_hat = fit$par$mu, 
                  sd_hat = fit$par$sd)
 par.fit
+# plot MCMC samples with observed data
 x <- seq(-0.25, 0.25, by = 0.01)
 y = dnorm(x = x, mean = par.fit$mu_hat, sd = par.fit$sd_hat)
 p.ind + geom_line(data = tibble(x=x, y=y), aes(x = x, y = y), color = 'red')
 summary(draws)
 
-# log-likelihood plots posterior predictive
+# plot log-likelihood, posterior predictive
 N = df.gaussian$diff %>% length()
 df.ll = mat %>% rowid_to_column("i_sample") %>% group_by(i_sample) %>% 
   mutate(ll.X = dnorm(rnorm(N, mean=mu, sd=sd), mean=mu, sd=sd, log=T) %>% sum())
@@ -95,10 +101,10 @@ df.ll %>% ggplot() + geom_density(aes(x=ll.X)) +
   labs(x = "log likelihood samples from posterior predictive")
 
 
-# Same with webppl --------------------------------------------------------
+# Fit using webppl --------------------------------------------------------
 # fit Gaussian independent-data
 ind_trials = c("all", df.gaussian$id %>% unique())
-evs.posterior = map_dfr(ind_trials, function(trial_id){
+evs.posterior.ind = map_dfr(ind_trials, function(trial_id){
   message(trial_id)
   if(trial_id == "all") {
     df.trial = df.gaussian
@@ -129,10 +135,13 @@ evs.posterior = map_dfr(ind_trials, function(trial_id){
     add_column(id = trial_id)
   return(evs.posterior)
 })
-evs.posterior
+evs.posterior.ind
+
+save_data(evs.posterior.ind, paste(target_dir, "fit_ind.rds", sep=FS))
+
 
 x <- seq(-1, 1, by = 0.01)
-y = dnorm(x = x, mean = evs.posterior$mu, sd = evs.posterior$sigma)
+y = dnorm(x = x, mean = evs.posterior.ind$mu, sd = evs.posterior.ind$sigma)
 p.ind + geom_line(data = tibble(x=x, y=y), aes(x = x, y = y), color = 'red')
 
 
@@ -171,8 +180,18 @@ ppc_dens_overlay(data_webppl$probs, samples.pp[1:50,])
 # log likelihood of samples from posterior predictive (return ll_X_new by wppl)
 tibble(ll_X = samples.pp) %>% ggplot(aes(x = ll_X)) + geom_density()
 
-# Dependent Trials --------------------------------------------------------
 
+
+
+# Fit independent marginals to Zero-one inflated beta ---------------------
+probs <- c("blue", "green")
+df.ind_marginals = df.gaussian %>% dplyr::select(blue, green, prolific_id, id)
+evs.posterior.ind_marginals = fit_zoib(df.ind_marginals, ind_trials, probs)
+
+
+
+
+# Dependent Trials --------------------------------------------------------
 ###############################################
 #### fit Zero-inflated Beta P(c|a), P(c|¬a) ###
 ###############################################
@@ -193,46 +212,13 @@ df.dep %>% filter(!is.na(if_bg) & !is.na(if_nbg)) %>%
   geom_hdr(probs = c(0.99, 0.9, 0.5, 0.25)) +
   facet_wrap(~id) + labs(x = "P(green|blue)", y = "P(green|¬blue)")
   
-
+# fit Zero-one inflated beta distribution
 dep_trials = c("all", "if1", "if2", df.dep$id %>% unique())
-evs.posterior.dep = map_dfr(dep_trials, function(trial_id){
-  message(trial_id)
-  if(trial_id == "all") {
-    df.trial = df.dep
-  } else if(trial_id == "if1") {
-    df.trial = df.dep %>% filter(relation == "if1")
-  } else if(trial_id == "if2") {
-    df.trial = df.dep %>% filter(relation == "if2")
-  } else {
-    df.trial = df.dep %>% filter(id == trial_id)
-  }
-  probs <- c("if_bg", "if_nbg", "if_gb", "if_ngb")
-  evs.posterior_trial = map_dfr(probs, function(p) {
-    df.trial_p <- df.trial %>% rename(p = !!p) %>% filter(!is.na(p))
-    data_webppl = list(probs = df.trial_p)
-    samples.posterior <- webppl(
-      program_file = here("webppl-model", "posterior-dependent-trials.wppl"),
-      data_var = "data",
-      model_var = "non_normalized_posterior",
-      data = data_webppl,
-      inference_opts = list(method = "MCMC",
-                            samples = 1000,
-                            lag = 2,
-                            burn = 10000,
-                            verbose = T),
-      chains = 4, 
-      cores = 4) %>% as_tibble() 
-    
-    evs.posterior = samples.posterior %>% group_by(Parameter) %>% 
-      summarize(ev = mean(value)) %>% 
-      pivot_wider(names_from = "Parameter", values_from = "ev") %>% 
-      add_column(id = trial_id, p = p)
-    return(evs.posterior)
-  })
-  return(evs.posterior_trial)
-})
+probs <- c("if_bg", "if_nbg", "if_gb", "if_ngb")
+evs.posterior.dep = fit_zoib(df.dep, dep_trials, probs)
 evs.posterior.dep
-save_data(evs.posterior.dep, paste(target_dir, "fit_dep.rds", sep=""))
+
+save_data(evs.posterior.dep, paste(target_dir, "fit_dep.rds", sep=FS))
 
 
 # Posterior predictive dependent trials -----------------------------------
