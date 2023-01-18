@@ -10,6 +10,9 @@ library(ExpDataWrangling)
 library(ModelUtils)
 library(rwebppl)
 library(bayesplot)
+library(xtable)
+library(ggpubr)
+library(tidyselect)
 
 source(here("R", "fit-data-helper-functions.R"))
 # Data --------------------------------------------------------------------
@@ -41,10 +44,15 @@ data.pe = data.behav %>%
 #### fit Gaussian P(a,c) - P(a) * P(c) ####
 ###########################################
 # 1. Data
-df.gaussian = data.pe %>% dplyr::select(blue, green, AC, prolific_id, id) %>% 
+df.ind.trials = data.pe %>% dplyr::select(blue, green, AC, prolific_id, id) %>% 
   mutate(diff = AC - blue * green) %>% 
   filter(str_detect(id, "independent"))
-p.ind = df.gaussian %>% ggplot() + geom_density(aes(x=diff))
+
+df.ind = bind_rows(df.ind.trials, df.ind.trials %>% mutate(id = "all"))
+p.ind = df.ind %>%
+  ggplot(aes(color = id)) + geom_density(aes(x=diff)) +
+  facet_wrap(~id, ncol = 3, scales = "free") +
+  theme(legend.position = "top")
 
 
 # Fit by using Greta ------------------------------------------------------
@@ -53,7 +61,7 @@ mu = normal(0, 1)
 sd = uniform(0, 1)
 
 # likelihood
-y <- as_data(df.gaussian$diff)
+y <- as_data(df.ind$diff)
 distribution(y) <- normal(mu, sd)
 
 # 3. model
@@ -86,12 +94,12 @@ p.ind + geom_line(data = tibble(x=x, y=y), aes(x = x, y = y), color = 'red')
 summary(draws)
 
 # plot log-likelihood, posterior predictive
-N = df.gaussian$diff %>% length()
+N = df.ind$diff %>% length()
 df.ll = mat %>% rowid_to_column("i_sample") %>% group_by(i_sample) %>% 
   mutate(ll.X = dnorm(rnorm(N, mean=mu, sd=sd), mean=mu, sd=sd, log=T) %>% sum())
 
 df.ll.obs = mat %>% rowid_to_column("i_sample") %>% group_by(i_sample) %>% 
-  mutate(ll.obs = dnorm(df.gaussian$diff, mean=mu, sd=sd, log=T) %>% sum())
+  mutate(ll.obs = dnorm(df.ind$diff, mean=mu, sd=sd, log=T) %>% sum())
 
 
 df.ll %>% ggplot() + geom_density(aes(x=ll.X)) +
@@ -102,14 +110,14 @@ df.ll %>% ggplot() + geom_density(aes(x=ll.X)) +
 
 
 # Fit using webppl --------------------------------------------------------
-# fit Gaussian independent-data
-ind_trials = c("all", df.gaussian$id %>% unique())
-evs.posterior.ind = map_dfr(ind_trials, function(trial_id){
+# fit Gaussian independent-data (P(b,g) - P(b)*P(g))
+ind_trials = c("all", df.ind$id %>% unique())
+posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
   message(trial_id)
   if(trial_id == "all") {
-    df.trial = df.gaussian
+    df.trial = df.ind
   } else {
-    df.trial = df.gaussian %>% filter(id == trial_id)
+    df.trial = df.ind %>% filter(id == trial_id)
   }
   data_webppl = list(probs = df.trial$diff, 
                      prior_mu = params$fit_ind_prior_mu, 
@@ -126,69 +134,98 @@ evs.posterior.ind = map_dfr(ind_trials, function(trial_id){
                           verbose = T),
     chains = 4, 
     cores = 4) %>%
-    as_tibble() %>% group_by(Parameter, Chain) %>% 
-    mutate(Chain = as.factor(Chain), Parameter = as.character(Parameter))  
-  
-  evs.posterior = samples.posterior %>% group_by(Parameter) %>% 
-    summarize(ev = mean(value)) %>% 
-    pivot_wider(names_from = "Parameter", values_from = "ev") %>% 
+    as_tibble() %>% 
+    pivot_wider(names_from = "Parameter", values_from = "value") %>% 
     add_column(id = trial_id)
-  return(evs.posterior)
+    # group_by(Parameter, Chain) %>% 
+    # mutate(Chain = as.factor(Chain), Parameter = as.character(Parameter))  
+  
+  return(samples.posterior)
 })
-evs.posterior.ind
+evs.posterior.ind = posterior_samples.ind %>% 
+  pivot_longer(cols = c("mu", "sigma"), names_to = "Parameter", 
+               values_to = "value") %>% 
+  group_by(id, Parameter) %>%
+  summarize(ev = mean(value), .groups = "drop_last") %>% 
+  pivot_wider(names_from = "Parameter", values_from = "ev")
+  
+save_data(evs.posterior.ind, paste(target_dir, "fit_ind_diffs.rds", sep=FS))
 
-save_data(evs.posterior.ind, paste(target_dir, "fit_ind.rds", sep=FS))
-
-
+# plot data with fitted distributions
 x <- seq(-1, 1, by = 0.01)
-y = dnorm(x = x, mean = evs.posterior.ind$mu, sd = evs.posterior.ind$sigma)
-p.ind + geom_line(data = tibble(x=x, y=y), aes(x = x, y = y), color = 'red')
+fitted_vals = evs.posterior.ind %>% 
+  mutate(y = list(dnorm(x, mean = mu, sd = sigma)), x = list(x)) %>% 
+  unnest(c(x, y))
 
+p.ind + geom_line(data = fitted_vals, aes(x=x, y=y), color = 'firebrick')
 
 # plot priors used: for sd and mu
-x.prior_mu = seq(-0.5, 0.5, by = 0.01)
-x.prior_sd = seq(data_webppl$prior_sigma$a, 
-                 data_webppl$prior_sigma$b, 
+prior_mu.x = seq(-0.5, 0.5, by = 0.01)
+prior_sd.x = seq(params$fit_ind_prior_sigma$a, 
+                 params$fit_ind_prior_sigma$b, 
                  by = 0.01)
-df.prior_mu = tibble(x = x.prior_mu, 
-                     y = dnorm(x, mean = data_webppl$prior_mu$mu, 
-                               sd = data_webppl$prior_mu$sigma), 
+df.prior_mu = tibble(x = prior_mu.x, 
+                     y = dnorm(x, mean = params$fit_ind_prior_mu$mu, 
+                               sd = params$fit_ind_prior_mu$sigma), 
                      Parameter = "mu", level = "prior")
-df.prior_sd = tibble(x = x.prior_sd, y = 1, Parameter = "sd", level = "prior")
+df.prior_sd = tibble(x = prior_sd.x, y = 1, Parameter = "sd", level = "prior")
 
-bind_rows(df.prior_mu, df.prior_sd) %>% 
+bind_rows(df.prior_mu, df.prior_sd) %>%
   ggplot() + geom_line(aes(x=x, y=y, color = Parameter)) +
-  geom_density(data = posterior_samples, aes(x = value)) +
-  facet_wrap(~Parameter, scales = "free") 
+  theme(legend.position = "none") + 
+  facet_wrap(~Parameter, scales = "free")
 
 
 # Posterior predictive webppl ---------------------------------------------
-samples.mu = samples.posterior %>% filter(Parameter == "mu") %>% pull(value)
-samples.sigma = samples.posterior %>% filter(Parameter == "sigma") %>% pull(value)
+samples.pp.ind = group_map(posterior_samples.ind %>% group_by(id), 
+                                     function(df.samples, df.grp){
+  message(paste(df.grp$id))
+  # get empirical data for id-probability combination
+  if(df.grp$id == "all") {
+    behav.trial = df.ind
+  } else {
+    behav.trial = df.ind %>% filter(id == df.grp$id)
+  }
+  
+  data_webppl = list(probs = behav.trial$diff, 
+                     samples_posterior = list(mu = df.samples$mu,
+                                              sigma = df.samples$sigma))
+  
+  samples.pp <- webppl(
+    program_file = here("webppl-model", "posterior-predictive-independent-trials.wppl"),
+    data_var = "data",
+    data = data_webppl
+  )
+  
+  X_new <- unlist(samples.pp$X_new) %>% matrix(ncol = behav.trial %>% nrow(), byrow=T)
+  ll_X_new <- samples.pp$ll_X_new
+  ll_X_obs = samples.pp$ll_X_obs
+  
+  result = tibble(X_new = list(X_new), 
+                  ll_X_new = list(ll_X_new), 
+                  ll_X_obs = list(ll_X_obs))
+  return(result %>% add_column(id = df.grp$id))
+}) %>% bind_rows()
 
-data_webppl = list(probs = df.gaussian$diff, 
-                   samples_posterior = list(mu = samples.mu,
-                                            sigma = samples.sigma))
-samples.pp <- webppl(
-  program_file = here("webppl-model", "posterior-predictive-independent-trials.wppl"),
-  data_var = "data",
-  data = data_webppl
-) %>% as.matrix()  
-
-ppc_dens_overlay(data_webppl$probs, samples.pp[1:50,])
-
-# log likelihood of samples from posterior predictive (return ll_X_new by wppl)
-tibble(ll_X = samples.pp) %>% ggplot(aes(x = ll_X)) + geom_density()
-
-
+# log likelihood plot
+ll_plot.ind = plot_pp_ll(samples.pp.ind %>% add_column(p = "")) +
+  theme(legend.position = "none")
+ll_plot.ind
 
 
 # Fit independent marginals to Zero-one inflated beta ---------------------
+# P(blue), P(green)
 probs <- c("blue", "green")
-df.ind_marginals = df.gaussian %>% dplyr::select(blue, green, prolific_id, id)
-evs.posterior.ind_marginals = fit_zoib(df.ind_marginals, ind_trials, probs)
+df.ind_marginals = df.ind %>% dplyr::select(blue, green, prolific_id, id)
+posterior_samples.ind_marginals = fit_zoib(df.ind_marginals, ind_trials, probs)
+evs.ind_marginals = get_evs_zoib_samples(posterior_samples.ind_marginals)
 
+pp.ind_marginals = posterior_predictive_zoib(posterior_samples.ind_marginals, 
+                                             df.ind_marginals) 
+pp_ll_plot.ind = plot_pp_ll(pp.ind_marginals)
+pp_ll_plot.ind + theme(legend.position = "none")
 
+save_data(evs.ind_marginals, paste(target_dir, "fit_ind_marginals.rds", sep=FS))
 
 
 # Dependent Trials --------------------------------------------------------
@@ -200,28 +237,45 @@ df.dep = data.pe %>%
          if_nbg = `if blue does not fall green falls`, 
          if_gb = `if green falls blue falls`, 
          if_ngb = `if green does not fall blue falls`) %>% 
-  dplyr::select(prolific_id, id, if_bg, if_nbg, if_gb, if_ngb, blue, green) %>% 
+  dplyr::select(prolific_id, id, if_bg, if_nbg, if_gb, if_ngb, blue, green, 
+                AC, `A-C`, `-AC`, `-A-C`) %>% 
   filter(!str_detect(id, "independent")) %>% 
   mutate(relation = case_when(str_detect(id, "if2") ~ "if2",
                               str_detect(id, "if1") ~ "if1")) %>% 
   group_by(relation)
 
-# plot rated P(green|blue) vs. P(green|¬blue)
-df.dep %>% filter(!is.na(if_bg) & !is.na(if_nbg)) %>% 
-  ggplot(aes(x = if_bg, y = if_nbg)) + 
-  geom_hdr(probs = c(0.99, 0.9, 0.5, 0.25)) +
-  facet_wrap(~id) + labs(x = "P(green|blue)", y = "P(green|¬blue)")
-  
 # fit Zero-one inflated beta distribution
 dep_trials = c("all", "if1", "if2", df.dep$id %>% unique())
-probs <- c("if_bg", "if_nbg", "if_gb", "if_ngb")
-evs.posterior.dep = fit_zoib(df.dep, dep_trials, probs)
-evs.posterior.dep
+probs <- c("if_bg", "if_nbg", "if_gb", "if_ngb", "blue", "green")
+posterior_samples.dep = fit_zoib(df.dep, dep_trials, probs)
+evs.posterior.dep <- get_evs_zoib_samples(posterior_samples.dep)
+
+pp.dep = posterior_predictive_zoib(posterior_samples.dep, df.dep) 
+# log likelihood plots
+pp_ll_plot.dep0 = plot_pp_ll(pp.dep %>% filter(id %in% c("all", "if1", "if2")))
+pp_ll_plot.dep0
+
+pp_ll_plot.dep1 = plot_pp_ll(pp.dep %>% filter(startsWith(id, "if1_")))
+pp_ll_plot.dep1
+
+pp_ll_plot.dep2 = plot_pp_ll(pp.dep %>% filter(startsWith(id, "if2_")))
+pp_ll_plot.dep2
 
 save_data(evs.posterior.dep, paste(target_dir, "fit_dep.rds", sep=FS))
 
+# for table in thesis
+evs.table = evs.posterior.dep %>% 
+  dplyr::select(alpha, gamma, shape1, shape2, id, p) %>%
+  mutate(across(where(is.numeric), function(x){
+   return(round(x, digits = 1))
+  }))
+
+evs.table %>% filter(p == "blue")
 
 # Posterior predictive dependent trials -----------------------------------
+samples.pp.dep = posterior_predictive_zoib(posterior_samples.dep, df.dep)
+
+
 # (for one single run, prob: P(g|b), if1_uh)
 trial_id = "if_uh" #(run once inner loop above)
 p <- "if_bg"
@@ -239,17 +293,68 @@ samples.pp <- webppl(
   program_file = here("webppl-model", "posterior-predictive-dependent-trials.wppl"),
   data_var = "data",
   data = data_webppl
-) %>% as.matrix()
+)
 
-ppc_dens_overlay(df.trial[[p]], samples.pp[1:50,])
+# byrow is important!! by default: columns are used
+X_new <- unlist(samples.pp$X_new) %>% matrix(ncol = length(df.trial[[p]]), byrow=T)
+ll_X_new <- samples.pp$ll_X_new
+ll_X_obs.mean = samples.pp$ll_X_obs %>% mean()
 
-# log likelihood of samples from posterior predictive (return ll_X_new by wppl)
-tibble(ll_X = samples.pp) %>% ggplot(aes(x = ll_X)) + geom_density()
+# log-likelihood plot
+tibble(ll_X = ll_X_new) %>% 
+  ggplot(aes(x = ll_X)) + 
+  geom_density() +
+  geom_point(data = tibble(ll_X = ll_X_obs.mean), aes(y=0), color = 'firebrick')
 
-#expected log likelihood for draws from posterior for observed data 
-# (other return value webppl)
-mean(samples.pp) 
+# posterior predictive plot
+ppc_dens_overlay(df.trial[[p]], X_new[1:50,])
 
 
+
+
+# Some plots causal power, conditional probabilities, etc. ----------------
+# plot rated P(green|blue) vs. P(green|¬blue)
+df.dep_cp <-   df.dep %>% 
+  mutate(causal_power_bg = (if_bg - if_nbg) / (1 - if_nbg),
+         causal_power_gb = (if_gb - if_ngb) / (1 - if_ngb))
+
+df.dep_cp %>% filter(!is.na(if_bg) & !is.na(if_nbg)) %>% 
+  ggplot(aes(x = if_bg, y = if_nbg)) + 
+  geom_hdr(probs = c(0.99, 0.9, 0.5, 0.25)) +
+  facet_wrap(~id) + labs(x = "P(green|blue)", y = "P(green|¬blue)")
+
+df.dep_cp %>% filter(!is.na(if_bg) & !is.na(if_nbg)) %>% 
+  mutate(cp_larger_noise = causal_power_bg > if_nbg) %>% 
+  group_by(id) %>% summarize(m = mean(cp_larger_noise, na.rm = T))
+
+# look at rated causal powers
+df.causal_power = df.dep_cp %>% 
+  pivot_longer(cols = c(causal_power_bg, causal_power_gb), 
+               names_to = "causal_power", 
+               names_prefix = "causal_power_",
+               values_to = "theta") %>% 
+  mutate(causal_power = case_when(causal_power == "bg" ~ "blue block on green block", 
+                                  causal_power == "gb" ~ "green block on blue block")) %>% 
+  filter(!is.na(theta) & !is.infinite(theta)) 
+
+df.causal_power %>% 
+  group_by(id, causal_power) %>% 
+  summarize(val = median(theta), .groups = "drop_last") %>% 
+  arrange(desc(val))
+
+df.causal_power %>% filter(causal_power == "blue block on green block") %>% 
+  filter(theta>0) %>% 
+  ggplot(aes(x=theta, y = if_bg)) + 
+  geom_point() + 
+  geom_smooth(method='lm', formula= y~x) +
+  stat_regline_equation(label.x = 0.3, label.y = 0.15) +
+  stat_cor(label.x = 0.3, label.y = 0.05) +
+  facet_wrap(~id, ncol=4) +
+  labs(x = "causal power blue on green block", y = "P(green | blue)")
+
+
+df.causal_power %>% filter(causal_power == "blue block on green block") %>% 
+  ggplot(aes(x = theta)) + geom_histogram(aes(color = id)) +
+  facet_wrap(~id)
 
 

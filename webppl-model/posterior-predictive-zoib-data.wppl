@@ -40,8 +40,9 @@ var posterior_predictive = map2(function(par_beta, alpha_gamma){
 
   var ll_X_obs = sum(ll_x_obs)
 
+  return({ll_X_new, ll_X_obs, X_new: _.map(X_new, 'x')})
   //return(ll_X_obs)
-  return(ll_X_new)
+  //return(ll_X_new)
   //return(_.map(X_new, 'x'))
 
 }, samples_beta, samples_other_par)
