@@ -1,4 +1,3 @@
-// liklihoods Zero-one inflated Beta
 var par_zoibs = data["likelihoods_zoib"]
 var par_gaussian = data["likelihoods_gaussian"]
 
@@ -56,72 +55,10 @@ var priors_conditioned = map(function(r) {
     }, method: 'enumerate'})
   return([r, prior_conditioned_r])
 }, RELATIONS)
-var PRIOR_CONDITIONED_R = Object.fromEntries(priors_conditioned)
-//PRIOR_CONDITIONED_R
+var prior_conditioned_r = Object.fromEntries(priors_conditioned)
+//prior_conditioned_r
 
-var posterior_states_context_list = map(function(c_i){
-  var P_s_given_context = Infer({
-    model:function(){
-      var P_r_given_ci = get_P_r_given_context(c_i)
-      var r = sample(P_r_given_ci)
-      var s = sample(PRIOR_CONDITIONED_R[r])
-      if(s.r == "A || C"){
-        var p_blue_green = Math.exp(s.table.score("AC"))
-        var p_blue = p_blue_green + Math.exp(s.table.score("A-C"))
-        var p_green = p_blue_green + Math.exp(s.table.score("-AC"))
-        var diff = p_blue_green - p_blue * p_green
-
-        var cat_blue =  p_blue in [0, 1] ? "Bernoulli" : "Beta";
-        var likelihood_fn_blue = zoib_likelihoods[c_i]["blue"][cat_blue]
-
-        var cat_green = p_green in [0, 1] ? "Bernoulli" : "Beta";
-        var likelihood_fn_green = zoib_likelihoods[c_i]["green"][cat_green]
-
-        var ll = likelihood_fn_blue.score(p_blue) +
-          likelihood_fn_green.score(p_green) +
-          zoib_likelihoods[c_i]["blue"]["Categorical"].score(cat_blue) +
-          zoib_likelihoods[c_i]["green"]["Categorical"].score(cat_green) +
-          gaussian_likelihoods[c_i]["diff"].score(diff)
-
-        factor(ll)
-
-      } else { // dependent states
-
-        var likelihood_fns = zoib_likelihoods[c_i]
-        var log_likelihood = reduce(function(cell){
-          var p_cell = Math.exp(s.table.score(cell))
-          var cat = (p_cell == 0 || p_cell == 1) ? "Bernoulli" : "Beta";
-          // for p- either bernoulli or beta distribution retrieved
-          var likelihood_fn_p = likelihood_fns[cell][cat]
-          // probabilitiy to get extreme values (category: Bernoulli) vs.
-          // values within (0,1) (category: Beta)
-          var likelihood_fn_cat = likelihood_fns[cell]["Categorical"]
-
-          var ll = likelihood_fn_p.score(p_cell) + likelihood_fn_cat.score(cat)
-          return(ll)
-        }, 0, ["AC", "A-C", "-AC", "-A-C"])
-
-        factor(log_likelihood)
-      }
-      return(s)
-    }})
-    return([c_i, P_s_given_context])
-
-}, contexts)
-
-var POSTERIOR_STATES_CONTEXTS = Object.fromEntries(posterior_states_context_list)
-POSTERIOR_STATES_CONTEXTS
-
-// var posterior_states_trial_subj_list = map(function(trial_id){
-//   var observed_trial = OBSERVATIONS_BY_TRIAL_SUBJ[trial_id]
-//   var subjects = Object.keys(observed_trial)
-//   var observations = Object.values(observed_trial)
-//   var p_s_given_dij = map(function(obs){
-//     return(posterior_given_context(obs, PRIOR_CONDITIONED_R))
-//   }, observations)
-//
-//   var obj = Object.fromEntries(zip(subjects, p_s_given_dij))
-//   return([trial_id, obj])
-// }, TRIAL_IDS)
-// var POSTERIOR_STATES_TRIAL_SUBJ = Object.fromEntries(posterior_states_trial_subj_list)
-// POSTERIOR_STATES_TRIAL_SUBJ
+var posterior_states_contexts = get_posterior_given_context(
+  prior_conditioned_r, zoib_likelihoods, gaussian_likelihoods, contexts
+)
+posterior_states_contexts

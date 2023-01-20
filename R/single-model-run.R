@@ -58,15 +58,15 @@ params$prior_samples = states
 params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
 
 # Analyze weights ---------------------------------------------------------
-
+trials <- data.pe$id %>% unique()
 # weights by context
 params$likelihoods_zoib <- bind_rows(
   readRDS(here("results/context-free-prior/fit_dep_tbls.rds")), 
   readRDS(here("results/context-free-prior/fit_ind_marginals.rds"))
-)
+) %>% filter(id %in% trials)
 path_par_ind_diffs = here("results/context-free-prior/fit_ind_diffs.rds")
 params$likelihoods_gaussian <- readRDS(path_par_ind_diffs) %>% 
-  mutate(p = "diff")
+  mutate(p = "diff") %>% filter(id %in% trials)
 
 weights = run_webppl("webppl-model/weights-contexts.wppl", params) %>% 
   bind_rows(.id = "id") %>% group_by(id) %>% arrange(desc(probs)) %>% 
@@ -202,8 +202,35 @@ ggsave(paste(target_dir, "p_r_Dij.png", sep=FS), plot.posterior_r,
        width = 10, height = 6)
 # Run Model ---------------------------------------------------------------
 path_model_file = paste(params$dir_wppl_code, params$fn_rsa_single_run, sep=FS)
-posterior <- run_webppl(path_model_file, params)
 
+# include observations as ratios and counts
+params$observed_utts_ratios <- left_join(
+    tibble(id = trials, utterance = list(params$utterances)) %>%
+      unnest(c(utterance)),
+    params$observations %>% group_by(id, utterance) %>% count(), 
+  ) %>% mutate_if(is.numeric, coalesce, 0) %>% 
+  group_by(id) %>% 
+  mutate(ratio = n / sum(n))
+
+posterior <- run_webppl(path_model_file, params)
+model_predictions <- posterior %>% 
+  map(function(x){as_tibble(x) %>% mutate(ll_ci = as.numeric(ll_ci))}) %>% 
+  bind_rows() %>% group_by(id) %>% 
+  mutate(p_hat_round = round(p_hat, 2)) %>% 
+  arrange(desc(p_hat))
+
+production.joint = left_join(model_predictions, 
+                             params$observed_utts_ratios %>% rename(p = ratio)) %>% 
+  rename(model = p_hat, behavioral = p) %>% 
+  mutate(relation = case_when(startsWith(id, "independent") ~ "independent", 
+                              startsWith(id, "if1") ~ "if1",
+                              startsWith(id, "if2") ~ "if2"))
+
+
+# plot_correlation(production.joint, color = "id") + facet_wrap(~id)
+
+
+### old predictions by trial + subj ####
 model_predictions <- posterior %>% 
   map(function(x){as_tibble(x)}) %>% bind_rows() %>% 
   unnest(cols = c(predictions)) %>% 

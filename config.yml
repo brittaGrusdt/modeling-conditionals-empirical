@@ -6,7 +6,7 @@ default:
   dir_wppl_code: "webppl-model"
   dir_presampled_states: "presampled-states"
   fn_rsa_model: "default-model.wppl"
-  fn_rsa_single_run: "model-single-run.wppl"
+  fn_rsa_single_run: "model-single-run-by-contexts.wppl"
   fn_get_weights: "weights-subj-trial.wppl"
   fn_gen_utts: "utterances.wppl"
   fn_results: "results-speaker.rds"
