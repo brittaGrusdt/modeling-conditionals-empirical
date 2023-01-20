@@ -21,10 +21,11 @@ params.data = config::get()
 path_empiric_tbls_ids = paste(params.data$dir_data, 
                               params.data$fn_tbls_empiric_pids, sep = FS)
 
-cns = create_causal_nets(params$p_noise, params$p_cp, params$p_ant, 
-                         params$rels_dep, params$p_a, params$p_c)
-params$causal_nets_dep = cns$dep
-params$causal_nets_ind = cns$ind
+# use special causal nets, witgh different marginal distributions than uniform
+# cns = create_causal_nets(params$p_noise, params$p_cp, params$p_ant,
+#                          params$rels_dep, params$p_a, params$p_c)
+# params$causal_nets_dep = cns$dep
+# params$causal_nets_ind = cns$ind
 
 # behavioral data
 data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
@@ -57,6 +58,73 @@ params$prior_samples = states
 params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
 
 # Analyze weights ---------------------------------------------------------
+
+# weights by context
+params$likelihoods_zoib <- bind_rows(
+  readRDS(here("results/context-free-prior/fit_dep_tbls.rds")), 
+  readRDS(here("results/context-free-prior/fit_ind_marginals.rds"))
+)
+path_par_ind_diffs = here("results/context-free-prior/fit_ind_diffs.rds")
+params$likelihoods_gaussian <- readRDS(path_par_ind_diffs) %>% 
+  mutate(p = "diff")
+
+weights = run_webppl("webppl-model/weights-contexts.wppl", params) %>% 
+  bind_rows(.id = "id") %>% group_by(id) %>% arrange(desc(probs)) %>% 
+  unnest(c(support)) %>% 
+  unnest(c(table.probs, table.support)) %>% 
+  pivot_wider(names_from = table.support, values_from = table.probs) %>% 
+  group_by(id) %>% mutate(cdf = cumsum(probs))
+
+
+# analyze weights
+weights %>% group_by(id) %>% summarize(n_states = n())
+weights %>% group_by(id) %>% filter(cdf <= 0.99) %>%  summarize(n_states = n())
+
+# compute expected state for each context based on weights 
+expected.states = weights %>% 
+  pivot_longer(cols = c("AC", "A-C", "-AC", "-A-C"), 
+               names_to = "cell", values_to = "value") %>% 
+  group_by(id, cell) %>%
+  summarize(ev_cell = sum(probs * value), .groups = "drop_last") %>% 
+  add_column(data = "model states")
+
+# expected slider ratings per context
+slider_ratings = data.pe %>% 
+  dplyr::select(id, AC, `A-C`, `-AC`, `-A-C`) %>% 
+  pivot_longer(cols = c("AC", "A-C", "-AC", "-A-C"), 
+               names_to = "cell", values_to = "value")
+expected.slider_ratings = slider_ratings %>% 
+  group_by(id, cell) %>% 
+  summarize(ev_cell = mean(value), .groups = "drop_last") %>% 
+  add_column(data = "empirical slider ratings")
+
+data.joint <- bind_rows(expected.states, expected.slider_ratings) %>% 
+  mutate(cell = factor(cell, levels = c("AC", "A-C", "-AC", "-A-C")))
+cell_names <- c(
+  `-A-C` = "Neither block falls",
+  `-AC` = "Only the green block falls",
+  `A-C` = "Only the blue block falls",
+  `AC` = "Both blocks fall"
+)
+# plot expected ratings / model states
+plots.expected_states = map(data.joint$id %>% unique, function(id){
+  p <- data.joint %>% 
+    filter(id == !!id) %>% 
+    ggplot(aes(x = cell, y = ev_cell, fill = data, color=data)) +
+    geom_bar(stat = "identity", position = position_dodge()) + 
+    facet_wrap(~cell, ncol = 2, scales = "free_x", 
+               labeller=labeller(cell=cell_names)) +
+    theme_minimal() + 
+    theme(axis.ticks.x = element_blank(), 
+          axis.text.x = element_blank()) +
+    labs(x = "event", y = "Expected value states/slider ratings", 
+         title = id) +
+    theme(legend.position = "bottom")
+  return(p)
+})
+
+
+#weights by subj and trial
 path_model_weights = paste(params$dir_wppl_code, params$fn_get_weights, sep=FS)
 weights = run_webppl(path_model_weights, params)
 

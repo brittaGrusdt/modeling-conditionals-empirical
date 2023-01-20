@@ -28,6 +28,11 @@ default:
   theta_might: 0
   n_forward_samples: 1000
   verbose: true
+  causal_nets_dep: !expr c("A implies C_unif-high-low",
+                           "C implies A_unif-high-low", 
+                           "-A implies C_unif-high-low",
+                           "-C implies A_unif-high-low")
+  causal_nets_ind: !expr c("A || C_unif-unif")
   cns: !expr c("A implies C", "C implies A", "A implies -C", "C implies -A", "A || C")
   #dir_packages: !expr c(paste("webppl-model", "node_modules", sep = .Platform$file.sep))
   packages:  !expr c(paste("webppl-model", "node_modules", 
