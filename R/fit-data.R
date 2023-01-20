@@ -15,6 +15,19 @@ library(ggpubr)
 library(tidyselect)
 
 source(here("R", "fit-data-helper-functions.R"))
+
+# for plots
+p_cols = c("blue" = "blue4",
+            "green" = "forestgreen", 
+            "if_bg" = "hotpink1", 
+            "if_gb" = "sienna1" , 
+            "if_nbg" = "deeppink3", 
+            "if_ngb" = "orangered3", 
+            "AC" = "deepskyblue", 
+            "A-C" = "mediumblue", 
+            "-AC" = "darkorange", 
+            "-A-C" = "lightcoral")
+
 # Data --------------------------------------------------------------------
 active_config = "context_free_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
@@ -41,6 +54,7 @@ data.pe = data.behav %>%
 
 # Independent Trials ------------------------------------------------------
 ###########################################
+####        Independent trials         ####
 #### fit Gaussian P(a,c) - P(a) * P(c) ####
 ###########################################
 # 1. Data
@@ -142,6 +156,9 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
   
   return(samples.posterior)
 })
+save_data(posterior_samples.ind, 
+          paste(target_dir, "posterior_samples_ind_diffs.rds", sep=FS))
+
 evs.posterior.ind = posterior_samples.ind %>% 
   pivot_longer(cols = c("mu", "sigma"), names_to = "Parameter", 
                values_to = "value") %>% 
@@ -229,9 +246,10 @@ save_data(evs.ind_marginals, paste(target_dir, "fit_ind_marginals.rds", sep=FS))
 
 
 # Dependent Trials --------------------------------------------------------
-###############################################
-#### fit Zero-inflated Beta P(c|a), P(c|¬a) ###
-###############################################
+################################################
+####          Dependent Trials              ####   
+#### fit Zero-inflated Beta P(c|a), P(c|¬a) ####
+################################################
 df.dep = data.pe %>%
   rename(if_bg = `if blue falls green falls`, 
          if_nbg = `if blue does not fall green falls`, 
@@ -250,6 +268,7 @@ probs <- c("if_bg", "if_nbg", "if_gb", "if_ngb", "blue", "green")
 posterior_samples.dep = fit_zoib(df.dep, dep_trials, probs)
 evs.posterior.dep <- get_evs_zoib_samples(posterior_samples.dep)
 
+# posterior predictive
 pp.dep = posterior_predictive_zoib(posterior_samples.dep, df.dep) 
 # log likelihood plots
 pp_ll_plot.dep0 = plot_pp_ll(pp.dep %>% filter(id %in% c("all", "if1", "if2")))
@@ -272,45 +291,48 @@ evs.table = evs.posterior.dep %>%
 
 evs.table %>% filter(p == "blue")
 
-# Posterior predictive dependent trials -----------------------------------
-samples.pp.dep = posterior_predictive_zoib(posterior_samples.dep, df.dep)
 
+# Fit single table cells --------------------------------------------------
+probs.tbls <- c("AC", "A-C", "-AC", "-A-C")
+posterior_samples.table_cells = fit_zoib(df.dep, dep_trials)
+save_data(posterior_samples.table_cells, 
+          paste(target_dir, "posterior_samples_dep_tbls.rds", sep=FS))
 
-# (for one single run, prob: P(g|b), if1_uh)
-trial_id = "if_uh" #(run once inner loop above)
-p <- "if_bg"
-samples.shape1 = samples.posterior %>% filter(Parameter == "shape1") %>% pull(value)
-samples.shape2 = samples.posterior %>% filter(Parameter == "shape2") %>% pull(value)
-samples.alpha = samples.posterior %>% filter(Parameter == "alpha") %>% pull(value)
-samples.gamma = samples.posterior %>% filter(Parameter == "gamma") %>% pull(value)
+evs.posterior.table_cells <- get_evs_zoib_samples(posterior_samples.table_cells)
+save_data(evs.posterior.table_cells, paste(target_dir, "fit_dep_tbls.rds", sep=FS))
 
-data_webppl = list(probs = df.trial[[p]], 
-                   samples_posterior = list(shape1 = samples.shape1,
-                                            shape2 = samples.shape2,
-                                            alpha = samples.alpha,
-                                            gamma = samples.gamma))
-samples.pp <- webppl(
-  program_file = here("webppl-model", "posterior-predictive-dependent-trials.wppl"),
-  data_var = "data",
-  data = data_webppl
-)
+# posterior predictive
+pp.dep.tbls = posterior_predictive_zoib(posterior_samples.table_cells, df.dep) 
+save_data(pp.dep.tbls, paste(target_dir, "pp_samples_dep_tbls.rds", sep=FS))
 
-# byrow is important!! by default: columns are used
-X_new <- unlist(samples.pp$X_new) %>% matrix(ncol = length(df.trial[[p]]), byrow=T)
-ll_X_new <- samples.pp$ll_X_new
-ll_X_obs.mean = samples.pp$ll_X_obs %>% mean()
+# log likelihood plots
+p_cols.tbls <- p_cols[probs.tbls]
+ids <- c("all", "if1", "if2")
+pp_ll_plot.dep0 = plot_pp_ll(pp.dep.tbls %>% filter(id %in% ids),
+                             p_cols.tbls)
+pp_ll_plot.dep0
 
-# log-likelihood plot
-tibble(ll_X = ll_X_new) %>% 
-  ggplot(aes(x = ll_X)) + 
-  geom_density() +
-  geom_point(data = tibble(ll_X = ll_X_obs.mean), aes(y=0), color = 'firebrick')
+pp_ll_plot.dep1 = plot_pp_ll(pp.dep.tbls %>% filter(startsWith(id, "if1_")),
+                             p_cols.tbls)
+pp_ll_plot.dep1
 
-# posterior predictive plot
-ppc_dens_overlay(df.trial[[p]], X_new[1:50,])
+pp_ll_plot.dep2 = plot_pp_ll(pp.dep.tbls %>% filter(startsWith(id, "if2_")), 
+                             p_cols.tbls)
+pp_ll_plot.dep2
 
+# plot posterior predictive
+X_new.if1_uh.ac = pp.dep.tbls %>% 
+  filter(id == "if1_uh" & p == "AC") %>% pull(X_new) %>% 
+  unlist() %>% matrix(ncol = 89, byrow = T)
+X_obs.if1_uh.ac = df.dep %>% filter(id == "if1_uh") %>% pull(AC)
+  
+ppc_dens_overlay(y=X_obs.if1_uh.ac, yrep = X_new.if1_uh.ac[1:50,])
 
-
+#########################
+####                 ####
+#### Some more plots ####
+####                 ####
+#########################
 
 # Some plots causal power, conditional probabilities, etc. ----------------
 # plot rated P(green|blue) vs. P(green|¬blue)

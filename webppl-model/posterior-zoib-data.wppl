@@ -10,8 +10,8 @@ var exponentialKernel = function(prevVal) {
 var non_normalized_posterior = function(){
 
   // draws from prior
-  var shape1 = sample(Exponential({a: 0.5}), {driftKernel: exponentialKernel})
-  var shape2 = sample(Exponential({a: 0.5}), {driftKernel: exponentialKernel})
+  var shape1 = sample(Exponential({a: 0.25}), {driftKernel: exponentialKernel})
+  var shape2 = sample(Exponential({a: 0.25}), {driftKernel: exponentialKernel})
   var gamma = uniformDrift({a: 0, b:1, width: 0.1})
   var alpha = uniformDrift({a: 0, b:1, width: 0.1})
 

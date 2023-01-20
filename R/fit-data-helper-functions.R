@@ -116,9 +116,9 @@ posterior_predictive_zoib = function(samples, data.behav){
 #'  with expected value of the log likelihood for observed data
 #'
 #' @param samples.pp data frame with columns id, p, X_new, ll_X_new, ll_X_obs
-#' entries for column p: blue, green, if_bg, if_gb, if_nbg, if_ngb
+#' @param p_cols named vector from entries of column p to color-string
 #' 
-plot_pp_ll = function(samples.pp){
+plot_pp_ll = function(samples.pp, p_cols){
   
   ll_data = group_map(samples.pp %>% group_by(id, p), function(df.samples, df.grp){
     
@@ -137,10 +137,6 @@ plot_pp_ll = function(samples.pp){
   }) %>% bind_rows() %>% group_by(id, p)
   
   ll_X_obs.mean = ll_data %>% summarize(ev = mean(ll_X_obs), .groups = "keep")
-  
-  p_cols = c("blue" = "blue4", "green" = "forestgreen", 
-             "if_bg" = "hotpink1", "if_gb" = "sienna1" , 
-             "if_nbg" = "deeppink3", "if_ngb" = "orangered3")
   
   p <- ll_data %>% 
     ggplot(aes(x = ll_X, color = p)) + 
