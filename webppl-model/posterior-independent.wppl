@@ -1,0 +1,180 @@
+// Retrieve data from R
+var observed_ratings = data["probs"]
+
+var exponentialKernel = function(prevVal) {
+  var lambda = 1 / prevVal;
+  return Exponential({a: lambda});
+};
+
+// Functions for zero-one inflated beta distribution //
+var sample_zoib_prior = function(){
+  var shape1 = sample(Exponential({a: 0.25}), {driftKernel: exponentialKernel}) // 0.25
+  var shape2 = sample(Exponential({a: 0.25}), {driftKernel: exponentialKernel})
+  var gamma = uniformDrift({a: 0, b:1, width: 0.1})
+  var alpha = uniformDrift({a: 0, b:1, width: 0.1})
+  return({alpha, gamma, shape1, shape2})
+}
+
+var sample_zoib = function(pars){
+  var p = bernoulli({p: pars.alpha}) ? bernoulli({p: pars.gamma}) :
+    beta({a: pars.shape1, b: pars.shape2});
+  return(p)
+}
+
+var get_zoib_likelihood = function(p_obs, pars){
+  var cat_obs = (p_obs == 0 || p_obs == 1) ? "01" : "Beta";
+  var ll_cat = Categorical({vs: ["01", "Beta"],
+                            ps: [pars.alpha, 1-pars.alpha]}).score(cat_obs)
+
+  var ll_p_obs = cat_obs == "01" ?
+    Bernoulli({p: pars.gamma}).score(p_obs == 1 ? true : false) :
+    Beta({a: pars.shape1, b: pars.shape2}).score(p_obs);
+
+  return(ll_cat + ll_p_obs)
+}
+
+var epsilon = 0.000001
+
+// generate new probability tables with given parameters //
+var sample_table = function(){
+  var params = data["evs_params"][0]
+  var pars_blue = {
+    alpha: params.alpha_blue, gamma: params.gamma_blue,
+    shape1: params.shape1_blue, shape2: params.shape2_blue
+  }
+  var pars_green = {
+    alpha: params.alpha_green, gamma: params.gamma_green,
+    shape1: params.shape1_green, shape2: params.shape2_green
+  }
+  // variance cannot take on arbitrary values, usually must be < mu * (1-mu)
+  var pars_bg = {ratio: params.ratio_range_variance_bg, variance: 0.05}
+
+  var p_blue = sample_zoib(pars_blue)
+  var p_green = sample_zoib(pars_green)
+  // display("blue: " + p_blue + " green: " + p_green)
+
+  var min_ac = p_blue + p_green > 1 ? p_blue + p_green - 1 : 0;
+  var max_ac = Math.min(p_blue, p_green)
+
+  // P(b,g)~P(b)*P(g) when B,G independent
+  var mu = p_blue * p_green
+  // variance in terms of mu and phi-parameters:
+  // variance = (mu * (1-mu)) / (1+phi)
+  var var_suggested = pars_bg.ratio * (max_ac - min_ac)
+  var variance = var_suggested < mu * (1-mu) ?
+    var_suggested : mu * (1-mu) - epsilon;
+
+  var phi = (mu * (1-mu) - variance) / variance
+  //display("mu: " + mu + " phi: " + phi)
+
+  // mu = shape1 / (shape1 + shape2) = shape1 / phi
+  // phi = shape1 + shape2
+  // rearrange so that shape1 and shape2 are given in terms of mu and phi
+  var shape1 = mu * phi
+  var shape2 = -mu * phi + phi
+
+  // avoid overflow
+  var min_is_max = (Math.round(min_ac * 100, 2) / 100) == (Math.round(max_ac * 100, 2) / 100)
+
+  //if(!min_is_max) display("shape1: " + shape1 + " shape2: " + shape2)
+  //display("a: " + min_ac + " c: " + max_ac)
+
+  // if min and max values for P(b,g) are equal, P(b,g) = P(b) = P(g)
+  // otherwise sample from following beta distribution and transform to Y to get
+  // a rv that is beta(shape1, shape2, min_ac, max_ac) distributed !!!
+  // Y~beta(shape1, shape2, min_ac, max_ac) ->
+  // X = (Y-a)/(c-a) ~ beta(shape1, shape2)
+  var p_bg = min_is_max ? min_ac : beta({a: shape1, b: shape2}) * (max_ac - min_ac) + min_ac;
+
+  // with P(b), P(g) and P(b,g), the probability table is fully defined
+  var anc = p_blue - p_bg < 0 ? 0 : p_blue - p_bg; // avoid overflow
+  var nac = p_green - p_bg < 0 ? 0 : p_green - p_bg;
+  var nanc = 1 - (p_bg + anc + nac)
+
+  // display("ac:" + p_bg + " anc: " + anc + " nac: " + nac + " nanc: " + nanc)
+  // display("")
+
+  // return(categorical({"vs": ["AC", "A-C", "-AC", "-A-C"],
+  //                     "ps": [p_bg, anc, nac, nanc]}))
+  return({AC: p_bg, "A-C": anc, "-AC": nac, "-A-C": nanc})
+}
+
+// from beta(alpha, beta, a, c) distributed to beta(alpha, beta, 0, 1)
+var transform_beta_ac_to_beta_01 = function(y, a, c){
+  var x = (y - a) / (c - a)
+  return(x)
+}
+
+// specify model
+var non_normalized_posterior = function(){
+
+  // draws from prior
+  var pars_blue = sample_zoib_prior()
+  var pars_green = sample_zoib_prior()
+  var pars_bg = {
+    //variance of P(b,g) defined relative to the size of the possible interval
+    "ratio": uniformDrift({a: 0, b:0.25, width: 0.1})
+  }
+
+  var ll = map(function(obs){
+    // log likelihood P(blue) and P(green)
+    var ll_blue = get_zoib_likelihood(obs.blue, pars_blue)
+    var ll_green = get_zoib_likelihood(obs.green, pars_green)
+    //display("ll_blue: " + ll_blue + " ll_green: " + ll_green)
+
+    // log likelihood P(b, g)
+    var min_ac = obs.blue + obs.green > 1 ? obs.blue + obs.green - 1 : 0;
+    var max_ac = Math.min(obs.blue, obs.green)
+
+    // P(b,g)~P(b)*P(g) when B,G independent
+    var mu = obs.blue * obs.green
+    //variance defined in terms of the proportion of the possible interval
+    var variance = pars_bg.ratio * (max_ac - min_ac)
+    //display("variance: " + variance + " ratio: " + pars_bg.ratio)
+    // variance = (mu * (1-mu)) / (1+phi)
+    var phi = (mu * (1-mu) - variance) / variance
+    // display("mu: " + mu + " phi: " + phi + " variance: " + variance)
+
+    var shape1 = mu * phi
+    var shape2 = -mu * phi + phi
+
+    // display("shape1: " + shape1 + " shape2: " + shape2)
+    // display("a: " + min_ac + " c: " + max_ac + " obs.AC: " + obs.AC + " blue: " + obs.blue + " green: " + obs.green)
+
+    // avoid overflow
+    var min_is_max = (Math.round(min_ac * 100, 2) / 100) == (Math.round(max_ac * 100, 2) / 100)
+    var obs_is_min = (Math.round(obs.AC * 100, 2) / 100) == (Math.round(min_ac * 100, 2) / 100)
+    var obs_is_max = (Math.round(obs.AC * 100, 2) / 100) == (Math.round(max_ac * 100, 2) / 100)
+
+    // the variance cannot take on arbitrary values! must be < mu * (1-mu) for interval (0, 1)
+    if(!min_is_max && (shape1 <= 0 || shape2 <= 0)){
+      return(-Infinity)
+    }
+
+    var x_val = !min_is_max  & !obs_is_max & !obs_is_min ?
+      transform_beta_ac_to_beta_01(obs.AC, min_ac, max_ac) : undefined;
+
+    //display("min: " + min_ac + " max: " + max_ac + " obs.AC: " + obs.AC + " x_val: " + x_val)
+    var ll_bg = x_val != undefined ? Beta({a: shape1, b: shape2}).score(x_val) : 0;
+    //if(!min_is_max) display(" mean: " + mu + " obs.AC: " + obs.AC + " ll_bg: " + ll_bg)
+
+    // if(ll_bg == 0 || ll_bg == -Infinity){
+    //   display(" mode: " + mode + " min: " + min_ac + " max: " + max_ac + " obs.AC: " + obs.AC)
+    //   display("AC: " + obs.AC + " blue: " + obs.blue + " green: " + obs.green)
+    // }
+    //display("ll_bg: " + ll_bg + " ll_blue: " + ll_blue + " ll_green: " + ll_green)
+    return(ll_bg + ll_blue + ll_green)
+ }, observed_ratings)
+
+ //display("sum(ll): " + sum(ll))
+ factor(sum(ll))
+
+ return({shape1_blue: pars_blue.shape1, shape2_blue: pars_blue.shape2,
+         gamma_blue: pars_blue.gamma, alpha_blue: pars_blue.alpha,
+
+         shape1_green: pars_green.shape1, shape2_green: pars_green.shape2,
+         gamma_green: pars_green.gamma, alpha_green: pars_green.alpha,
+
+         ratio_range_variance_bg: pars_bg.ratio
+       })
+}
