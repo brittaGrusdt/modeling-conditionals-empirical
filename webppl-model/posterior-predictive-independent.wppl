@@ -1,0 +1,68 @@
+// Retrieve data from R
+var observed_ratings = data["probs"]
+var samples_posterior = data["samples_posterior"]
+
+var posterior_predictive = map(function(pars){
+  var pars_blue = {
+    "alpha": pars.alpha_blue,
+    "gamma": pars.gamma_blue,
+    "shape1": pars.shape1_blue,
+    "shape2": pars.shape2_blue
+  }
+  var pars_green = {
+    "alpha": pars.alpha_green,
+    "gamma": pars.gamma_green,
+    "shape1": pars.shape1_green,
+    "shape2": pars.shape2_green
+  }
+  var pars_bg = {
+    //"ratio": pars.ratio_range_variance_bg
+    "shape1": pars.shape1_bg,
+    "shape2": pars.shape2_bg
+  }
+
+  var X_new = map(function(obs) {
+    var table_new = sample_independent_table(pars_blue, pars_green, pars_bg)
+    var bg = table_new["AC"]
+    var x_new = {
+      "bg": bg,
+      "blue": bg + table_new["A-C"],
+      "green": bg + table_new["-AC"]
+    }
+    var ll_x_sep = {
+      //"ll_x_bg": get_likelihood_independent_bg(x_new.blue, x_new.green, pars_bg.ratio, x_new.bg),
+      "ll_x_bg": get_likelihood_bg(obs, pars_bg),
+      "ll_x_blue": get_zoib_likelihood(x_new.blue, pars_blue),
+      "ll_x_green": get_zoib_likelihood(x_new.green, pars_green)
+    }
+
+    var ll_obs_sep = {
+      //"ll_obs_bg": get_likelihood_independent_bg(obs.blue, obs.green, pars_bg.ratio, obs.AC),
+      "ll_obs_bg": get_likelihood_bg(obs, pars_bg),
+      "ll_obs_blue":  get_zoib_likelihood(obs.blue, pars_blue),
+      "ll_obs_green": get_zoib_likelihood(obs.green, pars_green)
+    }
+
+    var ll_summed = {'ll_x': ll_x_sep.ll_x_bg + ll_x_sep.ll_x_blue + ll_x_sep.ll_x_green,
+                     'll_obs': ll_obs_sep.ll_obs_bg + ll_obs_sep.ll_obs_blue + ll_obs_sep.ll_obs_green}
+
+    return(Object.assign({}, ll_x_sep, ll_obs_sep, ll_summed))
+
+  }, observed_ratings)
+
+  return({
+    ll_X: sum(_.map(X_new, 'll_x')),
+    ll_obs: sum(_.map(X_new, 'll_obs')),
+
+    ll_obs_blue: sum(_.map(X_new, 'll_obs_blue')),
+    ll_obs_green: sum(_.map(X_new, 'll_obs_green')),
+    ll_obs_bg: sum(_.map(X_new, 'll_obs_bg')),
+
+    ll_x_blue: sum(_.map(X_new, 'll_x_blue')),
+    ll_x_green: sum(_.map(X_new, 'll_x_green')),
+    ll_x_bg: sum(_.map(X_new, 'll_x_bg'))
+  })
+
+}, samples_posterior)
+
+posterior_predictive
