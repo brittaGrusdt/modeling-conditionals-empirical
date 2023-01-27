@@ -100,6 +100,7 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
     program_file = here("webppl-model", "posterior-independent.wppl"),
     data_var = "data",
     model_var = "non_normalized_posterior",
+    random_seed = params$seed_webppl,
     data = data_webppl,
     packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
     inference_opts = list(method = "MCMC",
@@ -125,7 +126,8 @@ evs.posterior.ind = posterior_samples.ind %>%
   summarize(ev = mean(value), .groups = "drop_last") %>% 
   pivot_wider(names_from = "Parameter", values_from = "ev")
 
-
+save_data(evs.posterior.ind, 
+          paste(target_dir, "evs-posterior-independent-data.rds", sep=FS))
 
 # Generate new independent tables -----------------------------------------
 # generate set of independent tables with expected values of posterior distributions
@@ -135,6 +137,7 @@ sampled_tables = map_dfr(ind_trials, function(trial_id){
                       evs_params = evs.posterior.ind %>% filter(id == trial_id))
   samples.ind_tables <- webppl(
     program_file = here("webppl-model", "posterior-independent.wppl"),
+    random_seed = params$seed_webppl,
     data_var = "data",
     model_var = "sample_table",
     data = data_webppl,
@@ -179,6 +182,7 @@ plots_new_tables <- map(ind_trials, function(trial_id){
     facet_wrap(~fct_rev(cell), ncol=2, scales = "free") +
     labs(title = trial_id) +
     scale_color_manual(name = "data", values = colors) + 
+    theme_minimal() +
     theme(legend.position = "top")
   return(p)
 })
@@ -195,6 +199,7 @@ pp_samples_ll = group_map(posterior_samples.ind %>% group_by(id),
                                                 samples_posterior = df.samples)
                             samples.pp <- webppl(
                               program_file = here("webppl-model", "posterior-predictive-independent.wppl"),
+                              random_seed = params$seed_webppl,
                               data_var = "data",
                               data = data_webppl,
                               packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS))
@@ -218,6 +223,7 @@ p <- pp_samples_ll %>%
   ggplot(aes(x = ll_X_new)) + geom_density() +
   facet_wrap(~id, scales = "free") +
   geom_point(data = ll_X_obs.mean, aes(x=ev, y=0), size=2, color = 'firebrick') +
+  theme_minimal() +
   theme(legend.position = "top") +
   labs(x = "log likelihood", y = "density")
 p
@@ -241,6 +247,7 @@ p <- df.ll_X %>%
   ggplot(aes(x = ll)) + geom_density() +
   facet_wrap(prob~id, ncol=5, scales = "free") +
   geom_point(data = ll_X_obs.mean, aes(x=ev, y=0), size=2, color = 'firebrick') +
+  theme_minimal() +
   theme(legend.position = "top") +
   labs(x = "log likelihood", y = "density")
 p
