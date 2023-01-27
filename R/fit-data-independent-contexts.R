@@ -39,6 +39,7 @@ data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>%
                 pe_task.smooth, pe_task, slider) %>% 
   translate_standardized2model() 
 
+# use unsmoothed slider ratings from PE-task!
 data.pe = data.behav %>% 
   dplyr::select(prolific_id, id, utt.standardized, pe_task) %>% 
   pivot_wider(names_from = "utt.standardized", 
@@ -245,6 +246,7 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
     data_var = "data",
     model_var = "non_normalized_posterior",
     data = data_webppl,
+    packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
     inference_opts = list(method = "MCMC",
                           samples = 1000,
                           lag = 2,
@@ -260,7 +262,8 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
 })
 pars <- c("alpha_blue", "gamma_blue", "shape1_blue", "shape2_blue", 
           "alpha_green", "gamma_green", "shape1_green", "shape2_green",
-          "ratio_range_variance_bg")
+          "shape1_bg", "shape2_bg")
+          #"ratio_range_variance_bg")
 evs.posterior.ind = posterior_samples.ind %>% 
   pivot_longer(cols = all_of(pars), names_to = "Parameter", values_to = "value") %>% 
   group_by(id, Parameter) %>%
@@ -277,6 +280,7 @@ sampled_tables = map_dfr(ind_trials, function(trial_id){
     data_var = "data",
     model_var = "sample_table",
     data = data_webppl,
+    packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
     inference_opts = list(method = "forward",
                           samples = 1000)
   ) %>% as_tibble() %>% 
@@ -284,7 +288,7 @@ sampled_tables = map_dfr(ind_trials, function(trial_id){
   add_column(id = trial_id)
 })
 
-# plot new tables sampled for each independent context
+# plot new tables sampled for each independent context with observed data
 df.samples <- sampled_tables %>% 
   pivot_longer(cols = c(AC, `A-C`, `-AC`, `-A-C`), 
                names_to = "cell", values_to = "value")
@@ -321,6 +325,65 @@ plots_new_tables <- map(ind_trials, function(trial_id){
   return(p)
 })
 
+plots_new_tables
+
+# posterior predictive 
+pp_samples_ll = group_map(posterior_samples.ind %>% group_by(id),
+                                  function(df.samples, df.grp){
+  message(paste(df.grp$id))
+  data_webppl <- list(probs = df.behav %>% filter(id == df.grp$id),
+                      samples_posterior = df.samples)
+  samples.pp <- webppl(
+    program_file = here("webppl-model", "posterior-predictive-independent.wppl"),
+    data_var = "data",
+    data = data_webppl,
+    packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS))
+  ) 
+
+  result = tibble(ll_X_new = samples.pp$ll_X, 
+                  ll_obs = samples.pp$ll_obs, 
+                  ll_X_blue = samples.pp$ll_x_blue, 
+                  ll_X_green = samples.pp$ll_x_green, 
+                  ll_X_bg = samples.pp$ll_x_bg, 
+                  ll_obs_blue = samples.pp$ll_obs_blue, 
+                  ll_obs_green = samples.pp$ll_obs_green, 
+                  ll_obs_bg = samples.pp$ll_obs_bg)
+  return(result %>% add_column(id = df.grp$id))
+}) %>% bind_rows()
+
+# overall log likelihood of data from posterior predictive
+ll_X_obs.mean = pp_samples_ll %>% group_by(id) %>% 
+  summarize(ev = mean(ll_obs), .groups = "keep")
+p <- pp_samples_ll %>% 
+  ggplot(aes(x = ll_X_new)) + geom_density() +
+  facet_wrap(~id, scales = "free") +
+  geom_point(data = ll_X_obs.mean, aes(x=ev, y=0), size=2, color = 'firebrick') +
+  theme(legend.position = "top") +
+  labs(x = "log likelihood", y = "density")
+p
+
+# log likelihood seperate for P(b), P(g) and P(b,g)
+pp_samples_ll.long <- pp_samples_ll %>%
+  pivot_longer(cols = c(-id), names_to = "prob", names_prefix = "ll_", 
+               values_to = "ll")
+# ll pp-samples
+df.ll_X = pp_samples_ll.long %>% 
+  filter(startsWith(prob, "X_") & prob != "X_new") %>% 
+  mutate(prob = str_replace(prob, "X_", ""))
+
+# ev ll observed data given params from posterior
+ll_X_obs.mean = pp_samples_ll.long %>% group_by(id, prob) %>% 
+  filter(startsWith(prob, "obs_")) %>% 
+  summarize(ev = mean(ll), .groups = "drop_last") %>% 
+  mutate(prob = str_replace(prob, "obs_", ""))
+
+p <- df.ll_X %>% 
+  ggplot(aes(x = ll)) + geom_density() +
+  facet_wrap(prob~id, ncol=5, scales = "free") +
+  geom_point(data = ll_X_obs.mean, aes(x=ev, y=0), size=2, color = 'firebrick') +
+  theme(legend.position = "top") +
+  labs(x = "log likelihood", y = "density")
+p
 
 
 
