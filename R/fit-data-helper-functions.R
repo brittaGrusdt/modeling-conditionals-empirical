@@ -126,7 +126,7 @@ plot_pp_ll = function(samples.pp, p_cols){
     pp_data = unlist(df.samples$X_new)
     n_col = pp_data %>% length() / n_samples # nb. of data points for this trial
     
-    X_new <- pp_data %>% matrix(ncol = n_col, byrow=T)
+    # X_new <- pp_data %>% matrix(ncol = n_col, byrow=T)
     ll_X_new <- unlist(df.samples$ll_X_new)
     ll_X_obs = unlist(df.samples$ll_X_obs)
   
@@ -141,7 +141,7 @@ plot_pp_ll = function(samples.pp, p_cols){
   p <- ll_data %>% 
     ggplot(aes(x = ll_X, color = p)) + 
     geom_density() +
-    facet_grid(p~id, scales = "free") +
+    facet_grid(id~p, scales = "free") +
     geom_point(data = ll_X_obs.mean, aes(x=ev, y=0), size=2) +
     scale_color_manual(name = "probability", values = p_cols) + 
     theme(legend.position = "top") +

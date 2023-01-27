@@ -1,0 +1,85 @@
+// Retrieve data from R
+var observed_ratings = data["probs"]
+var samples_posterior = data["samples_posterior"]
+
+// var get_likelihood_conditional_probs = function(obs, pars_if_bg, pars_if_nbg){
+//   var ll_conditionals = obs.blue == 0 ?
+//     get_zoib_likelihood(obs.if_nbg, pars_if_nbg) : obs.blue == 1 ?
+//     get_zoib_likelihood(obs.if_bg, pars_if_bg) :
+//     (get_zoib_likelihood(obs.if_bg, pars_if_bg) +
+//       get_zoib_likelihood(obs.if_nbg, pars_if_nbg));
+//   return(ll_conditionals)
+// }
+
+var get_likelihood_if_bg = function(p_blue, p_if_bg, pars_if_bg) {
+  var ll = p_blue == 0 ? 0 : get_zoib_likelihood(p_if_bg, pars_if_bg);
+  return(ll)
+}
+
+var get_likelihood_if_nbg = function(p_blue, p_if_nbg, pars_if_nbg){
+  var ll = p_blue == 1 ? 0 : get_zoib_likelihood(p_if_nbg, pars_if_nbg);
+  return(ll)
+}
+
+var posterior_predictive = map(function(pars){
+  var pars_blue = {
+    "alpha": pars.alpha_blue,
+    "gamma": pars.gamma_blue,
+    "shape1": pars.shape1_blue,
+    "shape2": pars.shape2_blue
+  }
+  var pars_if_bg = {
+    "alpha": pars.alpha_if_bg,
+    "gamma": pars.gamma_if_bg,
+    "shape1": pars.shape1_if_bg,
+    "shape2": pars.shape2_if_bg
+  }
+  var pars_if_nbg = {
+    "alpha": pars.alpha_if_nbg,
+    "gamma": pars.gamma_if_nbg,
+    "shape1": pars.shape1_if_nbg,
+    "shape2": pars.shape2_if_nbg
+  }
+
+  var X_new = map(function(obs) {
+    var table_new = sample_dependent_table(pars_if_bg, pars_if_nbg, pars_blue)
+    var blue = table_new["AC"] + table_new["A-C"]
+    var x_new = {
+      "blue": blue,
+      "if_bg": table_new["AC"] / blue,
+      "if_nbg": table_new["-AC"] / (table_new["-AC"] + table_new["-A-C"])
+    }
+    var ll_x_sep = {
+      "ll_x_blue": get_zoib_likelihood(blue, pars_blue),
+      "ll_x_if_bg": get_likelihood_if_bg(blue, x_new.if_bg, pars_if_bg),
+      "ll_x_if_nbg":get_likelihood_if_nbg(blue, x_new.if_nbg, pars_if_nbg)
+    }
+    var ll_obs_sep = {
+      "ll_obs_blue": get_zoib_likelihood(obs.blue, pars_blue),
+      "ll_obs_if_bg": get_likelihood_if_bg(obs.blue, obs.if_bg, pars_if_bg),
+      "ll_obs_if_nbg": get_likelihood_if_nbg(obs.blue, obs.if_nbg, pars_if_nbg)
+    }
+
+    var ll_summed = {'ll_x': ll_x_sep.ll_x_blue + ll_x_sep.ll_x_if_bg + ll_x_sep.ll_x_if_nbg,
+                     'll_obs': ll_obs_sep.ll_obs_blue + ll_obs_sep.ll_obs_if_bg + ll_obs_sep.ll_obs_if_nbg}
+
+    return(Object.assign({}, ll_x_sep, ll_obs_sep, ll_summed))
+
+  }, observed_ratings)
+
+  return({
+    ll_X: sum(_.map(X_new, 'll_x')),
+    ll_obs: sum(_.map(X_new, 'll_obs')),
+
+    ll_obs_blue: sum(_.map(X_new, 'll_obs_blue')),
+    ll_obs_if_bg: sum(_.map(X_new, 'll_obs_if_bg')),
+    ll_obs_if_nbg: sum(_.map(X_new, 'll_obs_if_nbg')),
+
+    ll_x_blue: sum(_.map(X_new, 'll_x_blue')),
+    ll_x_if_bg: sum(_.map(X_new, 'll_x_if_bg')),
+    ll_x_if_nbg: sum(_.map(X_new, 'll_x_if_nbg'))
+  })
+
+}, samples_posterior)
+
+posterior_predictive

@@ -124,7 +124,11 @@ evs.posterior.ind = posterior_samples.ind %>%
   pivot_longer(cols = all_of(pars), names_to = "Parameter", values_to = "value") %>% 
   group_by(id, Parameter) %>%
   summarize(ev = mean(value), .groups = "drop_last") %>% 
-  pivot_wider(names_from = "Parameter", values_from = "ev")
+  pivot_wider(names_from = "Parameter", values_from = "ev") %>% 
+  # (order in thesis)
+  dplyr::select(id ,shape1_bg, shape2_bg,
+                alpha_blue, gamma_blue, shape1_blue, shape2_blue, 
+                alpha_green, gamma_green, shape1_green, shape2_green)
 
 save_data(evs.posterior.ind, 
           paste(target_dir, "evs-posterior-independent-data.rds", sep=FS))
@@ -142,8 +146,7 @@ sampled_tables = map_dfr(ind_trials, function(trial_id){
     model_var = "sample_table",
     data = data_webppl,
     packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
-    inference_opts = list(method = "forward",
-                          samples = 1000)
+    inference_opts = list(method = "forward", samples = 1000)
   ) %>% as_tibble() %>% 
     pivot_wider(names_from = "Parameter", values_from = "value") %>% 
     add_column(id = trial_id)

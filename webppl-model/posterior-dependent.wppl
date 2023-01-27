@@ -1,0 +1,59 @@
+// Retrieve data from R
+var observed_ratings = data["probs"]
+
+var sample_table = function(){
+  var params = data["evs_params"][0]
+  var pars_if_bg =  {
+    alpha: params.alpha_if_bg, gamma: params.gamma_if_bg,
+    shape1: params.shape1_if_bg, shape2: params.shape2_if_bg
+  }
+  var pars_if_nbg = {
+    alpha: params.alpha_if_nbg, gamma: params.gamma_if_nbg,
+    shape1: params.shape1_if_nbg, shape2: params.shape2_if_nbg
+  }
+  var pars_blue = {
+    alpha: params.alpha_blue, gamma: params.gamma_blue,
+    shape1: params.shape1_blue, shape2: params.shape2_blue
+  }
+
+  var table = sample_dependent_table(pars_if_bg, pars_if_nbg, pars_blue)
+  return(table)
+}
+
+
+// specify model
+var non_normalized_posterior = function(){
+
+  // draws from prior
+  var pars_if_bg = sample_zoib_prior()
+  var pars_if_nbg = sample_zoib_prior()
+  var pars_blue = sample_zoib_prior()
+
+  var ll = reduce(function(obs, acc) {
+    var ll_blue = get_zoib_likelihood(obs.blue, pars_blue)
+    var ll_conditionals = obs.blue == 0 ?
+      get_zoib_likelihood(obs.if_nbg, pars_if_nbg) : obs.blue == 1 ?
+      get_zoib_likelihood(obs.if_bg, pars_if_bg) :
+      (get_zoib_likelihood(obs.if_bg, pars_if_bg) +
+        get_zoib_likelihood(obs.if_nbg, pars_if_nbg));
+
+    var ll_x = ll_blue + ll_conditionals
+    //display(ll_x)
+    return(acc + ll_x)
+ }, 0, observed_ratings)
+
+ //display(ll)
+ factor(ll)
+
+ return(
+   {alpha_blue: pars_blue.alpha, gamma_blue: pars_blue.gamma,
+    shape1_blue: pars_blue.shape1, shape2_blue: pars_blue.shape2,
+
+    alpha_if_bg: pars_if_bg.alpha, gamma_if_bg: pars_if_bg.gamma,
+     shape1_if_bg: pars_if_bg.shape1, shape2_if_bg: pars_if_bg.shape2,
+
+     alpha_if_nbg: pars_if_nbg.alpha, gamma_if_nbg: pars_if_nbg.gamma,
+      shape1_if_nbg: pars_if_nbg.shape1, shape2_if_nbg: pars_if_nbg.shape2
+    }
+ )
+}
