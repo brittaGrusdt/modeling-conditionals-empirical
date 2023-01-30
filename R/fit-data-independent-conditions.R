@@ -1,4 +1,3 @@
-library(greta)
 library(here)
 library(tidyverse)
 library(tibble)
@@ -44,7 +43,14 @@ data.pe = data.behav %>%
 
 df.ind = data.pe %>%
   dplyr::select(blue, green, AC, `A-C`, `-AC`, `-A-C`, prolific_id, id) %>% 
-  mutate(diff = AC - blue * green) %>% 
+  mutate(bg_ind = blue * green,
+         diff = AC - bg_ind,
+         min_bg = case_when(blue + green > 1 ~ blue + green - 1, T ~ 0),
+         max_bg = pmin(blue, green), 
+         min_is_max_bg = round(min_bg, 2) == round(max_bg, 2),
+         diff_ac_min = round(AC, 2) - round(min_bg, 2),
+         diff_ac_max = round(max_bg, 2) - round(AC, 2)
+         ) %>% 
   filter(str_detect(id, "independent"))
 
 ind_trials = df.ind$id %>% unique()
@@ -53,19 +59,11 @@ ind_trials = df.ind$id %>% unique()
 # in necessary possible range, e.g. blue: 0.8, green: 0.8 --> min: 0.6, but
 # observed value for AC is 0.59
 df.to_normalize = df.ind %>% 
-  mutate(min_bg = case_when(blue + green > 1 ~ blue + green - 1,
-                            T ~ 0),
-         max_bg = pmin(blue, green), 
-         diff_ac_min = round(AC, 2) - round(min_bg, 2),
-         diff_ac_max = round(AC, 2) - round(max_bg, 2),
-         ac_out_range = AC < min_bg | AC > max_bg
-  ) %>% 
+  mutate(ac_out_range = AC < min_bg | AC > max_bg) %>% 
+  filter(ac_out_range & !min_is_max_bg & diff_ac_min !=0 & diff_ac_max != 0)
   # check how often observed is limit of possible interval:
-  # filter(ac_out_range & ((diff_ac_min != 0 & diff_ac_max == 0) |
-  #                          (diff_ac_min == 0 & diff_ac_max != 0) 
-  #                          ))
+  # filter(diff_ac_max == 0 | diff_ac_min == 0)
   # not in range and observed ac is not same as min and max value for ac:
-  filter(ac_out_range & diff_ac_min !=0 & diff_ac_max != 0)
 
 df.normalized = df.to_normalize %>% 
   group_by(id, prolific_id) %>% 
@@ -76,19 +74,30 @@ df.normalized = df.to_normalize %>%
          `-A-C` = `-A-C`/s, 
          blue = AC + `A-C`, 
          green = AC + `-AC`, 
-         min_bg = case_when(blue + green > 1 ~ blue + green - 1,
-                            T ~ 0),
-         max_bg = pmin(blue, green),
-         ac_out_range = AC < min_bg | AC > max_bg)
+         bg_ind = blue * green,
+         diff = AC - bg_ind,
+         min_bg = case_when(blue + green > 1 ~ blue + green - 1, T ~ 0),
+         max_bg = pmin(blue, green)
+  )
+
 # all data with those normalized where necessary
 df.behav <- bind_rows(
   anti_join(df.ind, df.normalized %>% dplyr::select(prolific_id, id)),
   df.normalized %>%
-    dplyr::select(-s, -min_bg, -max_bg, -ac_out_range, -diff_ac_min, -diff_ac_max)
+    dplyr::select(-s, -ac_out_range)
 )
 
-
-
+# check ratio difference P(b,g)-P(b)*P(g)
+df.behav %>% 
+  mutate(
+    max_sub = bg_ind - min_bg, # at most this subtracted from perfect indep P(a,c)=P(b)*P(g)
+    max_add = max_bg - bg_ind, # at most this added to perfect indep P(a,c)=P(b)*P(g)
+    delta = case_when(diff < 0 ~ -diff/max_sub,
+                      diff > 0 ~ diff/max_add,
+                      T ~ 0)
+    ) %>% 
+  ggplot(aes(x = delta)) + geom_density() +
+  facet_wrap(~id, scales = "free")
 
 # Posterior ---------------------------------------------------------------
 posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
@@ -118,7 +127,7 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
 })
 pars <- c("alpha_blue", "gamma_blue", "shape1_blue", "shape2_blue", 
           "alpha_green", "gamma_green", "shape1_green", "shape2_green",
-          "shape1_bg", "shape2_bg")
+          "alpha_bg", "gamma_bg", "shape1_bg", "shape2_bg", "p_sign")
 #"ratio_range_variance_bg")
 evs.posterior.ind = posterior_samples.ind %>% 
   pivot_longer(cols = all_of(pars), names_to = "Parameter", values_to = "value") %>% 
@@ -126,9 +135,10 @@ evs.posterior.ind = posterior_samples.ind %>%
   summarize(ev = mean(value), .groups = "drop_last") %>% 
   pivot_wider(names_from = "Parameter", values_from = "ev") %>% 
   # (order in thesis)
-  dplyr::select(id ,shape1_bg, shape2_bg,
+  dplyr::select(id, alpha_bg, gamma_bg, shape1_bg, shape2_bg,
                 alpha_blue, gamma_blue, shape1_blue, shape2_blue, 
-                alpha_green, gamma_green, shape1_green, shape2_green)
+                alpha_green, gamma_green, shape1_green, shape2_green, 
+                p_sign)
 
 save_data(evs.posterior.ind, 
           paste(target_dir, "evs-posterior-independent-data.rds", sep=FS))
@@ -195,41 +205,49 @@ plots_new_tables
 
 # Posterior predictive ----------------------------------------------------
 # Log likelihood plots
+likelihood_fn = function(df.samples, df.grp){
+  message(paste(df.grp$id))
+  data_webppl <- list(probs = df.behav %>% filter(id == df.grp$id),
+                      samples_posterior = df.samples)
+  samples.pp <- webppl(
+    program_file = here("webppl-model", "posterior-predictive-independent.wppl"),
+    random_seed = params$seed_webppl,
+    data_var = "data",
+    data = data_webppl,
+    packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS))
+  ) 
+  
+  result = tibble(ll_X_new = samples.pp$ll_X, 
+                  ll_obs = samples.pp$ll_obs, 
+                  ll_X_blue = samples.pp$ll_x_blue, 
+                  ll_X_green = samples.pp$ll_x_green, 
+                  ll_X_bg = samples.pp$ll_x_bg, 
+                  ll_obs_blue = samples.pp$ll_obs_blue, 
+                  ll_obs_green = samples.pp$ll_obs_green, 
+                  ll_obs_bg = samples.pp$ll_obs_bg)
+  return(result %>% add_column(id = df.grp$id))
+}
 pp_samples_ll = group_map(posterior_samples.ind %>% group_by(id),
-                          function(df.samples, df.grp){
-                            message(paste(df.grp$id))
-                            data_webppl <- list(probs = df.behav %>% filter(id == df.grp$id),
-                                                samples_posterior = df.samples)
-                            samples.pp <- webppl(
-                              program_file = here("webppl-model", "posterior-predictive-independent.wppl"),
-                              random_seed = params$seed_webppl,
-                              data_var = "data",
-                              data = data_webppl,
-                              packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS))
-                            ) 
-                            
-                            result = tibble(ll_X_new = samples.pp$ll_X, 
-                                            ll_obs = samples.pp$ll_obs, 
-                                            ll_X_blue = samples.pp$ll_x_blue, 
-                                            ll_X_green = samples.pp$ll_x_green, 
-                                            ll_X_bg = samples.pp$ll_x_bg, 
-                                            ll_obs_blue = samples.pp$ll_obs_blue, 
-                                            ll_obs_green = samples.pp$ll_obs_green, 
-                                            ll_obs_bg = samples.pp$ll_obs_bg)
-                            return(result %>% add_column(id = df.grp$id))
-                          }) %>% bind_rows()
+                          likelihood_fn) %>% bind_rows()
 
 # overall log likelihood of data from posterior predictive
 ll_X_obs.mean = pp_samples_ll %>% group_by(id) %>% 
   summarize(ev = mean(ll_obs), .groups = "keep")
+id_names <- c("independent_hh" = "ind:HH", 
+              "independent_hl" = "ind:HL", 
+              "independent_ll" = "ind:LL", 
+              "independent_uh" = "ind:UH", 
+              "independent_ul" = "ind:UL"
+              )
 p <- pp_samples_ll %>% 
   ggplot(aes(x = ll_X_new)) + geom_density() +
-  facet_wrap(~id, scales = "free") +
+  facet_wrap(~id, scales = "free", labeller = labeller(id = id_names)) +
   geom_point(data = ll_X_obs.mean, aes(x=ev, y=0), size=2, color = 'firebrick') +
   theme_minimal() +
-  theme(legend.position = "top") +
+  theme(legend.position = "top", text = element_text(size = 20)) +
   labs(x = "log likelihood", y = "density")
 p
+ggsave(paste(target_dir, "pp-log-likelihood-independent.png", sep = FS), p)
 
 # log likelihood seperate for P(b), P(g) and P(b,g)
 pp_samples_ll.long <- pp_samples_ll %>%

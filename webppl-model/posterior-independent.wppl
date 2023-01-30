@@ -12,9 +12,14 @@ var sample_table = function(){
     alpha: params.alpha_green, gamma: params.gamma_green,
     shape1: params.shape1_green, shape2: params.shape2_green
   }
+  var pars_bg = {
+    alpha: params.alpha_bg, gamma: params.gamma_bg,
+    shape1: params.shape1_bg, shape2: params.shape2_bg,
+    p_sign: params.p_sign
+  }
   // variance cannot take on arbitrary values, usually must be < mu * (1-mu)
   //var pars_bg = {ratio: params.ratio_range_variance_bg}
-  var pars_bg = {shape1: params.shape1_bg, shape2: params.shape2_bg}
+  //var pars_bg = {shape1: params.shape1_bg, shape2: params.shape2_bg}
 
   var table = sample_independent_table(pars_blue, pars_green, pars_bg)
   return(table)
@@ -26,12 +31,8 @@ var non_normalized_posterior = function(){
   // draws from prior
   var pars_blue = sample_zoib_prior()
   var pars_green = sample_zoib_prior()
-  var pars_bg = {
-    //variance of P(b,g) defined relative to the size of the possible interval
-    //"ratio": uniformDrift({a: 0, b:0.25, width: 0.1}),
-    "shape1": sample(Exponential({a: 0.25}), {driftKernel: exponentialKernel}),
-    "shape2": sample(Exponential({a: 0.1}), {driftKernel: exponentialKernel})
-  }
+  var pars_bg = Object.assign({p_sign: sample(Uniform({a: 0, b: 1}))},
+                              sample_zoib_prior())//sample_prior_bg()
 
   var ll = map(function(obs){
     // log likelihood P(blue) and P(green)
@@ -84,7 +85,8 @@ var non_normalized_posterior = function(){
          shape1_green: pars_green.shape1, shape2_green: pars_green.shape2,
          gamma_green: pars_green.gamma, alpha_green: pars_green.alpha,
 
-         //ratio_range_variance_bg: pars_bg.ratio
-         shape1_bg: pars_bg.shape1, shape2_bg: pars_bg.shape2
+         alpha_bg: pars_bg.alpha, gamma_bg: pars_bg.gamma,
+         shape1_bg: pars_bg.shape1, shape2_bg: pars_bg.shape2,
+         p_sign: pars_bg.p_sign
        })
 }

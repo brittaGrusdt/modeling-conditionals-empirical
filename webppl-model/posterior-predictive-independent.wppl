@@ -17,8 +17,11 @@ var posterior_predictive = map(function(pars){
   }
   var pars_bg = {
     //"ratio": pars.ratio_range_variance_bg
+    "alpha": pars.alpha_bg,
+    "gamma": pars.gamma_bg,
     "shape1": pars.shape1_bg,
-    "shape2": pars.shape2_bg
+    "shape2": pars.shape2_bg,
+    "p_sign": pars.p_sign
   }
 
   var X_new = map(function(obs) {
