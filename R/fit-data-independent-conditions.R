@@ -127,7 +127,7 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
 })
 pars <- c("alpha_blue", "gamma_blue", "shape1_blue", "shape2_blue", 
           "alpha_green", "gamma_green", "shape1_green", "shape2_green",
-          "alpha_bg", "gamma_bg", "shape1_bg", "shape2_bg", "p_sign")
+          "alpha_delta", "gamma_delta", "shape1_delta", "shape2_delta", "theta_p")
 #"ratio_range_variance_bg")
 evs.posterior.ind = posterior_samples.ind %>% 
   pivot_longer(cols = all_of(pars), names_to = "Parameter", values_to = "value") %>% 
@@ -135,10 +135,10 @@ evs.posterior.ind = posterior_samples.ind %>%
   summarize(ev = mean(value), .groups = "drop_last") %>% 
   pivot_wider(names_from = "Parameter", values_from = "ev") %>% 
   # (order in thesis)
-  dplyr::select(id, alpha_bg, gamma_bg, shape1_bg, shape2_bg,
+  dplyr::select(id, alpha_delta, gamma_delta, shape1_delta, shape2_delta,
                 alpha_blue, gamma_blue, shape1_blue, shape2_blue, 
                 alpha_green, gamma_green, shape1_green, shape2_green, 
-                p_sign)
+                theta_p)
 
 save_data(evs.posterior.ind, 
           paste(target_dir, "evs-posterior-independent-data.rds", sep=FS))

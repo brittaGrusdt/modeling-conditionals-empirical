@@ -103,14 +103,12 @@ evs.posterior.dep = posterior_samples.dep %>%
   pivot_wider(names_from = "Parameter", values_from = "ev") %>% 
   # (order in thesis)
   dplyr::select(id,
-                alpha_blue, gamma_blue, shape1_blue, shape2_blue, 
                 alpha_if_bg, gamma_if_bg, shape1_if_bg, shape2_if_bg,
-                alpha_if_nbg, gamma_if_nbg, shape1_if_nbg, shape2_if_nbg
-  )
+                alpha_if_nbg, gamma_if_nbg, shape1_if_nbg, shape2_if_nbg,
+                alpha_blue, gamma_blue, shape1_blue, shape2_blue)
 
 save_data(evs.posterior.dep, 
           paste(target_dir, "evs-posterior-dependent-data.rds", sep=FS))
-
 
 # Generate new dependent tables -------------------------------------------
 # generate set of dependent tables with expected values of posterior distributions
@@ -199,17 +197,28 @@ pp_samples_ll = group_map(posterior_samples.dep %>% group_by(id), ll_fn) %>%
   bind_rows()
 
 # overall log likelihood of data from posterior predictive
+id_names <- c("if1_hh" = "if1:HI", 
+              "if1_lh" = "if1:HI", 
+              "if1_u-Lh" = "if1:LI", 
+              "if1_uh" = "if1:UI", 
+              "if2_hl" = "if2:UL", 
+              "if2_ll" = "if2:UL", 
+              "if2_u-Ll" = "if2:UL", 
+              "if2_ul" = "if2:UL"
+)
+
 ll_X_obs.mean.all = pp_samples_ll %>% group_by(id) %>% 
   summarize(ev = mean(ll_obs), .groups = "keep")
 p.all <- pp_samples_ll %>% 
   ggplot(aes(x = ll_X_new)) + geom_density() +
-  facet_wrap(~id, scales = "free") +
+  facet_wrap(~id, scales = "free", ncol = 4, labeller = labeller(id = id_names)) +
   geom_point(data = ll_X_obs.mean.all, aes(x=ev, y=0), size=2, color = 'firebrick') +
   theme_minimal() +
-  theme(legend.position = "top") +
+  theme(legend.position = "top", text = element_text(size = 20)) +
   labs(x = "log likelihood", y = "density")
 p.all
 
+ggsave(paste(target_dir, "pp-log-likelihood-dependent.png", sep = FS), p.all)
 
 # log likelihood seperate for P(b), P(g|b) and P(g|¬b)
 pp_samples_ll.long <- pp_samples_ll %>%

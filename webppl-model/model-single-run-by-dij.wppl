@@ -18,6 +18,7 @@ setParams(params)
 //   params,
 //   true
 // )
+
 var uc_data = data["observed_utts_ratios"]
 var par_zoibs = data["likelihoods_zoib"]
 var par_bernoulli = data["likelihoods_bernoulli"]
@@ -36,7 +37,6 @@ if(data["verbose"][0]) {
   display("# literals: " + globalStore.states_literal.length)
   display("# conditionals: " + globalStore.states_conditional.length)
   display("# mights: " + globalStore.states_might.length)
-  display("contexts: " + contexts)
 }
 
 // get Bayes nets used for predictions for each trial + participant
@@ -53,10 +53,25 @@ var priors_conditioned = map(function(r) {
 }, RELATIONS)
 var prior_conditioned_r = Object.fromEntries(priors_conditioned)
 
+// for each context c_i get P(s|c_i)
 var posterior_states_contexts = get_posterior_given_context(
   prior_conditioned_r, par_zoibs, par_bernoulli, contexts
 )
-//display(posterior_states_contexts["if1_uh"])
+
+var posterior_states_dij_list = map(function(trial_id){
+  var observed_trial = OBSERVATIONS_BY_TRIAL_SUBJ[trial_id]
+  var subjects = Object.keys(observed_trial)
+  var observations = Object.values(observed_trial)
+  var P_s_ci = posterior_states_contexts[trial_id]
+
+  var p_s_given_dij = map(function(obs){
+    return(get_posterior_given_dij(P_s_ci, obs))
+  }, observations)
+
+  var obj = Object.fromEntries(zip(subjects, p_s_given_dij))
+  return([trial_id, obj])
+}, TRIAL_IDS)
+var posterior_states_dij = Object.fromEntries(posterior_states_dij_list)
 
 // RUN MODEL
 var rsa_speaker_predictions = run_speaker(ALL_BNS, false)
@@ -72,26 +87,32 @@ var speaker_predictions = predictions_with_gamma(rsa_speaker_predictions,
                                                  predictions_certain_worlds)
 
 // get predictions + compute log likelihood of utterance choices given model predictions
-var result = map(function(c_i) {
+var result = map(function(trial_id) {
   // some single trials were excluded
-  var observations_ci = filter(function(obj){
-    return(obj.id == c_i)
-  }, uc_data)
+  var observations_this_trial = filter(function(obj){
+    return(obj.id == trial_id)
+  }, OBSERVATIONS)
+  var subjects = _.map(observations_this_trial, 'prolific_id')
+  //display('nb subjects trial ' + trial_id + ": " + subjects.length)
 
-  var model_prediction = get_prediction_per_context(
-    speaker_predictions, c_i, posterior_states_contexts
-  )
-  // display(model_prediction)
+  var result_by_subj = map(function(subj) {
+    // first get model predictions for each trial + subject
+    var model_prediction = get_prediction_per_trial_and_subj(
+      speaker_predictions, trial_id, subj, posterior_states_dij
+    )
+    //display(model_prediction[0])
+    return({
+      ll_subj: get_log_likelihood_by_trial_and_subj(model_prediction, trial_id, subj),
+      prediction: model_prediction,
+      prolific_id: subj
+    })
+  }, subjects)
 
-  var result_by_ci = {
-    ll_ci: get_log_likelihood_by_context(observations_ci, model_prediction),
-    p_hat: model_prediction.params.ps,
-    utterance: model_prediction.params.vs,
-    id: c_i
-  }
-
-  return([c_i, result_by_ci])
-}, contexts)
+  //display(sum(log_likelihood_all_subj))
+  return([trial_id, {predictions: result_by_subj,
+                     id: trial_id,
+                     ll_trial: sum(_.map(result_by_subj, 'll_subj'))}])
+}, TRIAL_IDS)
 
 //var summed_log_likelihood = sum(_.map(log_likelihood_by_trial, 'll'))
 

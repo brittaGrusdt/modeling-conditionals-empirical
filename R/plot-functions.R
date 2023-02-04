@@ -1,3 +1,4 @@
+library(ggpubr)
 plot_correlation = function(results.joint, 
                             color = "utterance", shape = "relation",
                             label.x = 0.1, label.y = NA){
@@ -10,10 +11,10 @@ plot_correlation = function(results.joint,
     guides(fill = "none")
   if(!is.na(label.y)) {
     p_scatter <- p_scatter + 
-      stat_cor(aes(color = utterance), label.x = label.x, label.y = label.y)
+      stat_cor(aes(color = color), label.x = label.x, label.y = label.y)
   } else {
     p_scatter <- p_scatter + 
-      stat_cor(aes(color = utterance), label.x = label.x)
+      stat_cor(aes(color = color), label.x = label.x)
   }
 
   return(p_scatter)

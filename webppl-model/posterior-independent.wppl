@@ -13,9 +13,9 @@ var sample_table = function(){
     shape1: params.shape1_green, shape2: params.shape2_green
   }
   var pars_bg = {
-    alpha: params.alpha_bg, gamma: params.gamma_bg,
-    shape1: params.shape1_bg, shape2: params.shape2_bg,
-    p_sign: params.p_sign
+    alpha: params.alpha_delta, gamma: params.gamma_delta,
+    shape1: params.shape1_delta, shape2: params.shape2_delta,
+    theta: params.theta_p
   }
   // variance cannot take on arbitrary values, usually must be < mu * (1-mu)
   //var pars_bg = {ratio: params.ratio_range_variance_bg}
@@ -31,7 +31,7 @@ var non_normalized_posterior = function(){
   // draws from prior
   var pars_blue = sample_zoib_prior()
   var pars_green = sample_zoib_prior()
-  var pars_bg = Object.assign({p_sign: sample(Uniform({a: 0, b: 1}))},
+  var pars_bg = Object.assign({theta: sample(Uniform({a: 0, b: 1}))},
                               sample_zoib_prior())//sample_prior_bg()
 
   var ll = map(function(obs){
@@ -85,8 +85,8 @@ var non_normalized_posterior = function(){
          shape1_green: pars_green.shape1, shape2_green: pars_green.shape2,
          gamma_green: pars_green.gamma, alpha_green: pars_green.alpha,
 
-         alpha_bg: pars_bg.alpha, gamma_bg: pars_bg.gamma,
-         shape1_bg: pars_bg.shape1, shape2_bg: pars_bg.shape2,
-         p_sign: pars_bg.p_sign
+         alpha_delta: pars_bg.alpha, gamma_delta: pars_bg.gamma,
+         shape1_delta: pars_bg.shape1, shape2_delta: pars_bg.shape2,
+         theta_p: pars_bg.theta
        })
 }

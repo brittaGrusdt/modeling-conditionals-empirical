@@ -18,8 +18,8 @@ var params = {
   // cost_conditional: data.cost_conditional
   p_utts: data.p_utts
 }
-// var PROLIFIC_IDS = _.uniq(_.map(OBSERVATIONS, 'prolific_id'))
-//var TRIALS = _.uniq(_.map(OBSERVATIONS, 'id'))
+var PROLIFIC_IDS = _.uniq(_.map(OBSERVATIONS, 'prolific_id'))
+var TRIALS = _.uniq(_.map(OBSERVATIONS, 'id'))
 
 setParams(params)
 // just for debugging
@@ -60,7 +60,24 @@ var priors_conditioned = map(function(r) {
 var prior_conditioned_r = Object.fromEntries(priors_conditioned)
 //prior_conditioned_r
 
+// for each context c_i get P(s|c_i)
 var posterior_states_contexts = get_posterior_given_context(
   prior_conditioned_r, par_zoibs, pars_bernoulli_p_ind, contexts
 )
-posterior_states_contexts
+
+var posterior_states_dij_list = map(function(trial_id){
+  var observed_trial = OBSERVATIONS_BY_TRIAL_SUBJ[trial_id]
+  var subjects = Object.keys(observed_trial)
+  var observations = Object.values(observed_trial)
+  var P_s_ci = posterior_states_contexts[trial_id]
+
+  var p_s_given_dij = map(function(obs){
+    return(get_posterior_given_dij(P_s_ci, obs))
+  }, observations)
+
+  var obj = Object.fromEntries(zip(subjects, p_s_given_dij))
+  return([trial_id, obj])
+}, TRIAL_IDS)
+var posterior_states_dij = Object.fromEntries(posterior_states_dij_list)
+
+posterior_states_dij
