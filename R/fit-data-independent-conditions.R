@@ -106,7 +106,7 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
   data_webppl = list(probs = df.trial)
   
   samples.posterior <- webppl(
-    program_file = here("webppl-model", "posterior-independent.wppl"),
+    program_file = here("webppl-model", "posterior-independent-data.wppl"),
     data_var = "data",
     model_var = "non_normalized_posterior",
     random_seed = params$seed_webppl,
@@ -150,7 +150,7 @@ sampled_tables = map_dfr(ind_trials, function(trial_id){
   data_webppl <- list(probs = df.behav %>% filter(id == trial_id),
                       evs_params = evs.posterior.ind %>% filter(id == trial_id))
   samples.ind_tables <- webppl(
-    program_file = here("webppl-model", "posterior-independent.wppl"),
+    program_file = here("webppl-model", "posterior-independent-data.wppl"),
     random_seed = params$seed_webppl,
     data_var = "data",
     model_var = "sample_table",
@@ -210,7 +210,7 @@ likelihood_fn = function(df.samples, df.grp){
   data_webppl <- list(probs = df.behav %>% filter(id == df.grp$id),
                       samples_posterior = df.samples)
   samples.pp <- webppl(
-    program_file = here("webppl-model", "posterior-predictive-independent.wppl"),
+    program_file = here("webppl-model", "posterior-predictive-independent-data.wppl"),
     random_seed = params$seed_webppl,
     data_var = "data",
     data = data_webppl,

@@ -84,7 +84,7 @@ params$likelihoods_bernoulli <- pars.ind.theta_p
 
 # Run Model ---------------------------------------------------------------
 # 1. predictions by contexts
-path_model_file = paste(params$dir_wppl_code, params$fn_rsa_single_run, sep=FS)
+path_model_file = paste(params$dir_wppl_code, "model-single-run-by-contexts.wppl", sep=FS)
 
 # include observations as ratios and counts
 trials <- data.pe$id %>% unique()
