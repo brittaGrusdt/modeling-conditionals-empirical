@@ -21,6 +21,8 @@ Sys.setenv(R_CONFIG_ACTIVE = active_config)
 
 params <- config::get()
 if(!dir.exists(params$dir_results)) dir.create(params$dir_results, recursive = T)
+result_dir = params$dir_results
+
 
 dep_data_dir = paste(here(params$dir_results), "dependent-contexts", sep=FS)
 ind_data_dir = paste(here(params$dir_results), "independent-contexts", sep=FS)
@@ -63,10 +65,11 @@ params$observations = data.observed
 prior <- webppl(program_file = here("webppl-model", "run-state-prior.wppl"),
                 data_var = "data",
                 data = params,
+                random_seed = params$seed_webppl,
                 packages = params$packages[1:2]) 
 states = prior$prior$support %>% as_tibble()
 params$prior_samples = states
-params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
+# params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
 
 # load likelihood parameters (for fitted data)
 pars.dep <- readRDS(paste(dep_data_dir, "evs-posterior-dependent-data.rds", sep=FS)) %>% 
@@ -100,6 +103,11 @@ weights_ci = run_webppl("webppl-model/weights-contexts.wppl", params) %>%
   unnest(c(table.probs, table.support)) %>% 
   pivot_wider(names_from = table.support, values_from = table.probs) %>% 
   group_by(id) %>% mutate(cdf = cumsum(probs))
+
+
+save_data(weights_ci %>% dplyr::select(id, bn_id, probs), 
+          paste(result_dir, "weights_ci.rds", sep=FS))
+
 
 # analyze weights
 weights_ci %>% group_by(id) %>% summarize(n_states = n())
@@ -173,6 +181,9 @@ subjs.weights = group_map(data.pe %>% group_by(id), function(df, df.grp){
   mutate(cn = paste(r, probability, sep = "_")) %>% 
   arrange(desc(probs))
 
+save_data(subjs.weights %>% dplyr::select(prolific_id, id, bn_id, probs), 
+          paste(result_dir, "weights_dij.rds", sep=FS))
+
 modeled_r = subjs.weights$r %>% unique()
 modeled_cn = subjs.weights %>% ungroup() %>% dplyr::select(cn) %>% distinct() %>% pull(cn)
 modeled_bn_ids = subjs.weights %>% ungroup() %>% dplyr::select(bn_id) %>%
@@ -231,6 +242,8 @@ expected.joint.dij %>%
         axis.text.x = element_blank()) +
   labs(x = "event", y = "Expected value states/slider ratings")
 
+
+
 # weights by most similar states M_sim -------------------------------------
 weights_sim = run_webppl("webppl-model/weights-sim.wppl", params) 
 subjs.weights.sim = group_map(data.pe %>% group_by(id), function(df, df.grp){
@@ -249,6 +262,10 @@ subjs.weights.sim = group_map(data.pe %>% group_by(id), function(df, df.grp){
 }) %>% bind_rows() %>% group_by(prolific_id, id) %>% 
   mutate(cn = paste(r, probability, sep = "_")) %>% 
   arrange(desc(probs))
+
+save_data(subjs.weights.sim %>% dplyr::select(prolific_id, id, bn_id, probs), 
+          paste(result_dir, "weights_dij_sim.rds", sep=FS))
+
 
 expected.states.dij.sim = subjs.weights.sim %>% 
   dplyr::select(prolific_id, id, bn_id) %>% 
@@ -281,7 +298,6 @@ expected.joint.dij.sim %>%
   theme(axis.ticks.x = element_blank(), 
         axis.text.x = element_blank()) +
   labs(x = "event", y = "Expected value states/slider ratings")
-
 
 # Plots  ------------------------------------------------------------------
 # Plot distribution over relations for each participant for weights computed
