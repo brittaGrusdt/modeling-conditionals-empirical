@@ -33,6 +33,7 @@ draw_states_from_prior = function(params){
   prior <- webppl(program_file = here("webppl-model", "run-state-prior.wppl"),
                   data_var = "data",
                   data = params,
+                  random_seed = params$seed_webppl,
                   packages = c("webppl-model/node_modules/conditionalsHelpers", 
                                "webppl-model/node_modules/conditionalsDefault")) 
   states = prior$prior$support %>% as_tibble()

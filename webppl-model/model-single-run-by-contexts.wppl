@@ -78,8 +78,8 @@ var result = map(function(c_i) {
     return(obj.id == c_i)
   }, uc_data)
 
-  var model_prediction = get_prediction_per_context(
-    speaker_predictions, c_i, posterior_states_contexts
+  var model_prediction = get_weighted_rsa_prediction(
+    speaker_predictions, posterior_states_contexts[c_i]
   )
   // display(model_prediction)
 

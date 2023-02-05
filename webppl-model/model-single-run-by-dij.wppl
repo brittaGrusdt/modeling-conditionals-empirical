@@ -97,8 +97,8 @@ var result = map(function(trial_id) {
 
   var result_by_subj = map(function(subj) {
     // first get model predictions for each trial + subject
-    var model_prediction = get_prediction_per_trial_and_subj(
-      speaker_predictions, trial_id, subj, posterior_states_dij
+    var model_prediction = get_weighted_rsa_prediction(
+      speaker_predictions, posterior_states_dij[trial_id][subj]
     )
     //display(model_prediction[0])
     return({

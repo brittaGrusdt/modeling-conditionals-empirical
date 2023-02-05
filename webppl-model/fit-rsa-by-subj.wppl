@@ -1,0 +1,90 @@
+var PARAMS_TO_FIT = data["par_fit"]
+
+var observed_counts = data["observed_utts_ratios"]
+
+var par_zoibs = data["likelihoods_zoib"]
+var pars_bernoulli = data["likelihoods_bernoulli"]
+// weights for model states (how relevant for prediction of each subj + trial)
+var subj = data["subject_id"]
+var posterior_states_trial_subj = data["weights_dij"]
+var contexts = _.uniq(_.map(posterior_states_trial_subj, 'id'))
+
+var p_s_dij_contexts_list = map(function(c_i){
+  var states = filter(function(row){row.id == c_i}, posterior_states_trial_subj)
+  var bn_ids = _.map(states, 'bn_id')
+  //display(c_i)
+  var posterior = Infer({model:function(){
+    var s = uniformDraw(ALL_BNS)
+    condition(bn_ids.includes(s.bn_id))
+    return(s)
+  }})
+  return([c_i, posterior])
+}, contexts)
+
+var P_s_dij_contexts = Object.fromEntries(p_s_dij_contexts_list)
+/*
+// ************ States used for model predictions for each trial ************ //
+// get Bayes nets used for predictions for each trial + participant
+// we sample a certain number of Bayes nets per relation
+// (depending on P(r|data), computed beforehand in R)
+// // ONE DISTRIBUTION FOR EACH CN: PRIOR CONDITIONED ON CN
+*/
+var priors_conditioned = map(function(r) {
+  var prior_conditioned_r = Infer({model: function() {
+      var s = sample(globalStore.state_prior)
+      condition(s.r == r)
+      return(s)
+    }, method: 'enumerate'})
+  return([r, prior_conditioned_r])
+}, RELATIONS)
+var prior_conditioned_r = Object.fromEntries(priors_conditioned)
+
+
+var non_normalized_posterior = function() {
+  var params = priorSample(PARAMS_TO_FIT)
+  setParams(params)
+  // with current sampled set of parameters, are there any states where no
+  // utterance is applicable or any utterance without state?
+  // if yes do not consider these parameters
+  var invalid_utts_states = check_states_utts(
+    ALL_BNS,
+    _.map(globalStore.utterances, 'utt'),
+    globalStore.thresholds,
+    params,
+    false
+  )
+  condition(invalid_utts_states.states.length == 0)
+  condition(invalid_utts_states.utts.length == 0)
+  // // RUN MODEL
+  var rsa_speaker_predictions = run_speaker(ALL_BNS, false)
+  // predictions 4 (close to) certain worlds
+  var predictions_certain_worlds_list = map(function(bn){
+    return([bn.w, rsa_speaker_predictions[bn.bn_id]])
+    //return({w: bn.w, prediction: rsa_speaker_predictions[bn.bn_id]})
+  }, BNS_CERTAIN_WORLD)
+  var predictions_certain_worlds = Object.fromEntries(predictions_certain_worlds_list)
+  var speaker_predictions = predictions_with_gamma(rsa_speaker_predictions,
+                                                   predictions_certain_worlds)
+  // get predictions + compute log likelihood of utterance choices given model predictions
+  var log_likelihoods = map(function(c_i) {
+    var observed = OBSERVATIONS_BY_TRIAL_SUBJ[c_i][subj]
+    var model_prediction = get_weighted_rsa_prediction(
+      speaker_predictions, P_s_dij_contexts[c_i]
+    )
+    return(model_prediction.score(observed.utterance))
+  }, contexts)
+  var summed_log_likelihood = sum(log_likelihoods)
+  factor(summed_log_likelihood)
+  return(params)
+}
+
+
+Infer({
+  model: non_normalized_posterior,
+  method: data['mcmc_method'][0],
+  samples: data["mcmc_samples"][0],
+  burn: data['mcmc_burn'][0],
+  onlyMAP: data['mcmc_onlyMAP'][0],
+  lag: data['mcmc_lag'][0],
+  verbose: data['mcmc_verbose'][0]
+})
