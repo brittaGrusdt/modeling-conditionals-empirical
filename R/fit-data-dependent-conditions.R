@@ -11,21 +11,25 @@ library(bayesplot)
 library(xtable)
 library(ggpubr)
 library(tidyselect)
-
-source(here("R", "fit-data-helper-functions.R"))
+library(bayesplot)
+library(ggthemes)
+library(tidybayes)
+library(emmeans)
+library(brms)
 
 # for plots
 p_cols = c("blue" = "blue4",
-                  "green" = "forestgreen", 
-                  "if_bg" = "hotpink1", 
-                  "if_gb" = "sienna1" , 
-                  "if_nbg" = "deeppink3", 
-                  "if_ngb" = "orangered3", 
-                  "AC" = "deepskyblue", 
-                  "A-C" = "mediumblue", 
-                  "-AC" = "darkorange", 
-                  "-A-C" = "lightcoral")
+          "green" = "forestgreen", 
+          "if_bg" = "hotpink1", 
+          "if_gb" = "sienna1" , 
+          "if_nbg" = "deeppink3", 
+          "if_ngb" = "orangered3", 
+          "AC" = "deepskyblue", 
+          "A-C" = "mediumblue", 
+          "-AC" = "darkorange", 
+          "-A-C" = "lightcoral")
 
+theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
 # Data --------------------------------------------------------------------
 active_config = "context_free_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
@@ -111,22 +115,34 @@ save_data(evs.posterior.dep,
           paste(target_dir, "evs-posterior-dependent-data.rds", sep=FS))
 
 # Generate new dependent tables -------------------------------------------
+# get Posterior predictive data
 # generate set of dependent tables with expected values of posterior distributions
 sampled_tables = map_dfr(dep_trials, function(trial_id){
   message(trial_id)
-  data_webppl <- list(probs = df.dep %>% filter(id == trial_id),
-                      evs_params = evs.posterior.dep %>% filter(id == trial_id))
-  samples.dep_tables <- webppl(
-    program_file = here("webppl-model", "posterior-dependent-data.wppl"),
-    random_seed = params$seed_webppl,
-    data_var = "data",
-    model_var = "sample_table",
-    data = data_webppl,
-    packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
-    inference_opts = list(method = "forward", samples = 1000)
-  ) %>% as_tibble() %>% 
-    pivot_wider(names_from = "Parameter", values_from = "value") %>% 
-    add_column(id = trial_id)
+  
+  samples_trial <- posterior_samples %>% fitler(id == trial_id)
+  map(seq(1, nrow(samples_trial)), function(idx){
+    
+    posterior_params <- samples_trial[idx,]
+    data_trial <- df.dep %>% filter(id == trial_id)
+    data_webppl <- list(probs = data_trial,
+                        #probs = df.dep %>% filter(id == trial_id),
+                        evs_params = posterior_params)
+                        #evs_params = evs.posterior.dep %>% filter(id == trial_id))
+    
+    samples.dep_tables <- webppl(
+      program_file = here("webppl-model", "posterior-dependent-data.wppl"),
+      random_seed = params$seed_webppl,
+      data_var = "data",
+      model_var = "sample_table",
+      data = data_webppl,
+      packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
+      inference_opts = list(method = "forward", samples = nrow(data_trial))
+                            #samples = 1000)
+    ) %>% as_tibble() %>% 
+      pivot_wider(names_from = "Parameter", values_from = "value") %>% 
+      add_column(id = trial_id)
+  })
 })
 
 # plot new tables sampled for each dependent context with observed data
@@ -255,3 +271,6 @@ p.if2 <- df.ll_X %>% filter(startsWith(id, "if2")) %>%
   theme(legend.position = "top") +
   labs(x = "log likelihood", y = "density")
 p.if2
+
+
+

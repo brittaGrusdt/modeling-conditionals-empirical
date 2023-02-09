@@ -101,28 +101,18 @@ model_ind.pe_task = brm(
 posterior_draws <- tidy_draws(model_ind.pe_task)
 
 # Analyze Dirichlet regression --------------------------------------------
-# linear predictors mean estimate and quantiles
-predictions <- map_dfr(c('Estimate', 'Q2.5', 'Q97.5'), function(val){
-  model_params <- fixef(model_ind.pe_task)[, val]
-  predicted_probs <- bind_rows(
-    get_linear_predictors_ind('b', model_params), 
-    get_linear_predictors_ind('g', model_params), 
-    get_linear_predictors_ind('none', model_params)
-  ) %>% 
-    add_column(rowid = 1) %>% 
-    pivot_longer(cols=c(-response_cat, -rowid), names_to = "predictor", 
-                 values_to = "eta") %>% 
-    transform_to_probs('bg') %>%
-    pivot_wider(names_from = "response_cat", values_from = "p_hat") %>% 
-    add_column(val = !!val)
-  return(predicted_probs)
-})
-
-cat <- "bg"
-predictions %>% group_by(predictor, val) %>% mutate(blue = bg + b) %>% 
-  dplyr::select(predictor, val, !!cat) %>% 
-  pivot_wider(names_from = "val", values_from = !!cat) %>% 
-  add_column(response_cat = !!cat)
+# linear predictors mean estimate
+model_params <- fixef(model_ind.pe_task)[, 'Estimate']
+predictions <- bind_rows(
+  get_linear_predictors_ind('b', model_params), 
+  get_linear_predictors_ind('g', model_params), 
+  get_linear_predictors_ind('none', model_params)
+) %>% 
+  add_column(rowid = 1) %>% 
+  pivot_longer(cols=c(-response_cat, -rowid), names_to = "predictor", 
+               values_to = "eta") %>% 
+  transform_to_probs('bg') %>%
+  pivot_wider(names_from = "response_cat", values_from = "p_hat")
 
 conds <- make_conditions(df_ind.brms, c("pgreen"))
 p.cond_effects = conditional_effects(
@@ -159,7 +149,8 @@ ggsave(paste(target_dir, "posterior_blue.png", sep=FS), plot = posterior_blue)
 posterior_green = posterior_samples.probs %>% plot_posterior_prob("green", "P(green)")
 ggsave(paste(target_dir, "posterior_green.png", sep=FS), plot = posterior_green)
 
-posterior_bg = posterior_samples.probs %>% plot_posterior_prob("bg", "P(b,g)")
+posterior_bg = posterior_samples.probs %>% 
+  plot_posterior_prob("bg", "P(b,g)")
 ggsave(paste(target_dir, "posterior_bg.png", sep=FS), plot = posterior_bg)
 
 posterior_if_bg = posterior_samples.probs %>% mutate(if_bg = bg/(bg+b)) %>% 
@@ -178,6 +169,24 @@ ggsave(paste(target_dir, "posterior_if_gb.png", sep=FS), plot = posterior_if_gb)
 posterior_if_ngb = posterior_samples.probs %>% mutate(if_ngb = b/(b+none)) %>% 
   plot_posterior_prob("if_ngb", "P(b|¬g)")
 ggsave(paste(target_dir, "posterior_if_ngb.png", sep=FS), plot = posterior_if_ngb)
+
+# plot 4 probability sliders at once
+posterior_cells = plot_posterior_prob(
+  posterior_samples.probs %>% 
+    dplyr::select(-blue, -green, -relation) %>% 
+    pivot_longer(cols=c(bg, b, g, none), names_to = "world", values_to = "p_hat") %>% 
+    mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
+                          labels = c("bg", "b¬g", "¬bg", "¬b¬g")),
+           prior_blue_green=factor(prior_blue_green, 
+                                   levels = c("ll", "ul", "hl", "uh", "hh"), 
+                                   labels = c("LL", "UL", "HL", "UH", "HH")
+                                   )),
+  "p_hat", "Estimated probability"
+) + facet_wrap(~world, ncol = 2, labeller = labeller(relation = label_parsed)) +
+  theme(panel.spacing = unit(2, "lines"))
+ggsave(paste(target_dir, "posterior_cells.png", sep=FS), 
+       plot = posterior_cells, width = 12)
+
 
 
 # posterior probabilities hypotheses --------------------------------------
@@ -214,15 +223,23 @@ cat <- "green"
 # Posterior predictive checks ---------------------------------------------
 pp_samples <- posterior_predict(model_ind.pe_task)
 
-cat <- "g"
-ppc_dens_overlay_grouped(y=df_ind.brms$y[,cat], 
-                         yrep = pp_samples[1:100,,cat], 
-                         group = interaction(df_ind.brms$pgreen, 
-                                             df_ind.brms$pblue))
-
-
-
-
+pp_plots <- map(c("bg", "b", "g", "none"), function(cat){
+  map(c("high", "unc", "low"), function(pblue){
+    indices <- df_ind.brms$pblue == pblue
+    tit <- switch(cat, "bg" = "bg", "b" = "b¬g", "g" = "¬bg", "none" = "¬b¬g")
+    xlab <- switch(pblue, "high"="H", "unc"="U", "low"="L")
+    p <- ppc_dens_overlay_grouped(
+      y=df_ind.brms$y[indices, cat], 
+      yrep = pp_samples[1:100, indices, cat], 
+      group = df_ind.brms$pgreen[indices]
+      ) +
+      labs(x = paste("prior_blue:", xlab), title = tit) +
+      theme(legend.position = "none")
+    ggsave(paste(target_dir, FS, "pp_", cat, "_pblue_", pblue, 
+                 ".png", sep=""), plot = p, width = 5, height=3)
+    return(p)
+  })
+})
 
 
 

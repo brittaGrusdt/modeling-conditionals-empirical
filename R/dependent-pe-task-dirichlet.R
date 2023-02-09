@@ -37,10 +37,8 @@ active_config = "context_free_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 
-target_dep_dir = paste(here(params$dir_results), "dependent-contexts", sep=FS)
-target_ind_dir = paste(here(params$dir_results), "independent-contexts", sep=FS)
-if(!dir.exists(target_dep_dir)) dir.create(target_dep_dir, recursive = T)
-if(!dir.exists(target_ind_dir)) dir.create(target_ind_dir, recursive = T)
+target_dir = paste(here(params$dir_results), "dependent-contexts", sep=FS)
+if(!dir.exists(target_dir)) dir.create(target_dir, recursive = T)
 
 data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
   dplyr::select(prolific_id, id, utt.standardized, uc_task, pe_task.smooth, slider) %>% 
@@ -100,35 +98,25 @@ model_dep.pe_task = brm(
   warmup = 1000,
   prior = priors,
   control = list(adapt_delta = 0.9, max_treedepth=11),
-  file = paste(target_dep_dir, "model_pe_task_dep_dirichlet.rds", sep = FS)
+  file = paste(target_dir, "model_pe_task_dep_dirichlet.rds", sep = FS)
 )
 
 posterior_draws <- tidy_draws(model_dep.pe_task)
 
 # Analyze Dirichlet regression --------------------------------------------
 
-# linear predictors mean estimate and quantiles
-predictions <- map_dfr(c('Estimate', 'Q2.5', 'Q97.5'), function(val){
-  model_params <- fixef(model_dep.pe_task)[, val]
-  predicted_probs <- bind_rows(
-    get_linear_predictors_dep('b', model_params), 
-    get_linear_predictors_dep('g', model_params), 
-    get_linear_predictors_dep('none', model_params)
-  ) %>% 
-    add_column(rowid = 1) %>% 
-    pivot_longer(cols=c(-response_cat, -rowid), names_to = "predictor", 
-                 values_to = "eta") %>% 
-    transform_to_probs('bg') %>%
-    pivot_wider(names_from = "response_cat", values_from = "p_hat") %>% 
-    add_column(val = !!val)
-  return(predicted_probs)
-})
-
-cat <- "bg"
-predictions %>% group_by(predictor, val) %>% mutate(blue = bg + b) %>% 
-  dplyr::select(predictor, val, !!cat) %>% 
-  pivot_wider(names_from = "val", values_from = !!cat) %>% 
-  add_column(response_cat = !!cat)
+# linear predictors estimates
+model_params <- fixef(model_dep.pe_task)[, 'Estimate']
+predictions <- bind_rows(
+  get_linear_predictors_dep('b', model_params), 
+  get_linear_predictors_dep('g', model_params), 
+  get_linear_predictors_dep('none', model_params)
+) %>% 
+  add_column(rowid = 1) %>% 
+  pivot_longer(cols=c(-response_cat, -rowid), names_to = "predictor", 
+               values_to = "eta") %>% 
+  transform_to_probs('bg') %>%
+  pivot_wider(names_from = "response_cat", values_from = "p_hat")
 
 conds <- make_conditions(df_dep.brms, c("relation"))
 p.cond_effects = conditional_effects(
@@ -147,74 +135,114 @@ posterior_samples.probs = bind_rows(
   pivot_wider(names_from = "response_cat", values_from = "p_hat") %>% 
   group_by(predictor) %>% 
   mutate(blue = bg + b) %>% 
-  separate(predictor, into = c("relation", "prior_blue"), sep = "_")
+  separate(predictor, into = c("relation", "prior_blue"), sep = "_") %>% 
+  mutate(prior_blue = factor(prior_blue, levels = c("low", "uncl", "unc", "high")))
 
 
 # Plot posterior ----------------------------------------------------------
-posterior_blue = posterior_samples.probs %>% 
-  ggplot(aes(x=blue, fill=prior_blue)) + 
-  stat_halfeye(.width = c(0.95), point_interval = "mean_hdi") +
-  facet_wrap(~relation, labeller = labeller(relation = dep_r_names, 
-                                            .default = label_parsed)) +
-  labs(x = "P(blue)", y = "")
-posterior_blue
-ggsave(paste(target_dep_dir, "posterior_blue.png", sep=FS), plot = posterior_blue)
+plot_posterior_prob = function(posterior_samples.probs, x, lab_x){
+  plot.posterior = posterior_samples.probs %>% 
+    ggplot(aes(x=get(x), fill=prior_blue)) + 
+    stat_halfeye(.width = c(0.95), point_interval = "mean_hdi") +
+    facet_wrap(~relation, labeller = labeller(relation = dep_r_names, 
+                                              .default = label_parsed)) +
+    labs(x = lab_x, y = "") 
+  return(plot.posterior)
+}
 
-posterior_green = posterior_samples.probs %>% 
-  mutate(green = bg + g) %>% 
-  ggplot(aes(x=green, fill=prior_blue)) + 
-  stat_halfeye(.width = c(0.95), point_interval = "mean_hdi") +
-  facet_wrap(~relation, labeller = labeller(relation = dep_r_names, 
-                                            .default = label_parsed)) +
-  labs(x = "P(green)", y = "")
-posterior_green
-ggsave(paste(target_dep_dir, "posterior_green.png", sep=FS), plot = posterior_green)
+# plot all 4 probability estimates in one plot:
+posterior_cells = plot_posterior_prob(
+  posterior_samples.probs %>% pivot_longer(cols=c(bg, b, g, none), 
+                                           names_to = "world",
+                                           values_to = "p_hat") %>% 
+    mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
+                          labels = c("bg", "b¬g", "¬bg", "¬b¬g")),
+           relation=factor(relation, levels = c("if1", "if2"), 
+                           labels = c("IF[1]", "IF[2]")),
+           prior_blue = factor(prior_blue,
+                               levels = c("low", "uncl", "unc", "high"),
+                               labels = c("L", "U^-", "U", "H"))),
+  "p_hat", "Estimated probability"
+) + facet_grid(relation~world, labeller = labeller(relation = label_parsed)) +
+  scale_fill_discrete(labels = unname(TeX(c("L", "$U^-$", "U", "H")))) +   
+  theme(panel.spacing = unit(2, "lines"))
 
-posterior_if_bg = posterior_samples.probs %>% 
-  mutate(if_bg = bg/blue) %>% 
-  ggplot(aes(x=if_bg, fill=prior_blue)) + 
-  stat_halfeye(.width = c(0.95), point_interval = "mean_hdi") +
-  facet_wrap(~relation, labeller = labeller(relation = dep_r_names, 
-                                            .default = label_parsed)) +
-  labs(x = "P(g|b)", y = "")
-posterior_if_bg
-ggsave(paste(target_dep_dir, "posterior_if_bg.png", sep=FS), plot = posterior_if_bg)
+ggsave(paste(target_dir, "posterior_cells.png", sep=FS), 
+       plot = posterior_cells, width = 12)
 
-posterior_if_nbg = posterior_samples.probs %>% 
-  mutate(if_nbg = g/(g+none)) %>% 
-  ggplot(aes(x=if_nbg, fill=prior_blue)) + 
-  stat_halfeye(.width = c(0.95), point_interval = "mean_hdi") +
-  facet_wrap(~relation, labeller = labeller(relation = dep_r_names, 
-                                            .default = label_parsed)) +
-  labs(x = "P(g|¬b)", y = "")
-posterior_if_nbg
-ggsave(paste(target_dep_dir, "posterior_if_nbg.png", sep=FS), plot = posterior_if_nbg)
 
+
+
+posterior_blue = plot_posterior_prob(posterior_samples.probs, "blue", "P(b)")
+ggsave(paste(target_dir, "posterior_blue.png", sep=FS), plot = posterior_blue)
+
+posterior_green =  plot_posterior_prob(posterior_samples.probs %>%
+                                         mutate(green = bg + g),
+                                       "green", "P(g)")
+ggsave(paste(target_dir, "posterior_green.png", sep=FS), plot = posterior_green)
+
+posterior_if_bg =  plot_posterior_prob(posterior_samples.probs %>% 
+                                         mutate(if_bg = bg/blue), 
+                                       "if_bg", "P(g|b)")
+ggsave(paste(target_dir, "posterior_if_bg.png", sep=FS), plot = posterior_if_bg)
+
+posterior_if_nbg =  plot_posterior_prob(posterior_samples.probs %>% 
+                                          mutate(if_nbg = g/(g+none)),
+                                        "if_nbg", "P(g|¬b)")
+  ggsave(paste(target_dir, "posterior_if_nbg.png", sep=FS), plot = posterior_if_nbg)
 
 # posterior probabilities hypotheses
-# P(blue) estimated given prior blue: high>unc>uncl>low
+# P(bg) estimated given prior blue: high>unc>uncl>low
 cat <- "bg"
 posterior_samples.probs %>% 
   dplyr::select(rowid, relation, prior_blue, !!cat) %>% 
   group_by(rowid, relation) %>% 
   pivot_wider(names_from = "prior_blue", values_from = !!cat) %>% 
   group_by(relation) %>% 
-  summarize(high_unc = mean(high > unc), 
+  summarize(high_unc = mean(high > unc),
+            high_uncl = mean(high > uncl),
             unc_uncl = mean(unc > uncl),
             unc_low = mean(unc > low),
             uncl_low = mean(uncl > low)) %>% 
   add_column(response = !!cat)
 
 
+cat <- "none"
+posterior_samples.probs %>% 
+  dplyr::select(rowid, relation, prior_blue, !!cat) %>% 
+  group_by(rowid, relation) %>% 
+  pivot_wider(names_from = "prior_blue", values_from = !!cat) %>% 
+  group_by(relation) %>% 
+  summarize(high_unc = mean(high < unc), 
+            high_uncl = mean(high < uncl), 
+            unc_uncl = mean(unc < uncl),
+            unc_low = mean(unc < low),
+            uncl_low = mean(uncl < low)) %>% 
+  add_column(response = !!cat)
+
 
 # Posterior predictive checks ---------------------------------------------
 pp_samples <- posterior_predict(model_dep.pe_task)
 
-cat <- "b"
-ppc_dens_overlay_grouped(y=df_dep.brms$y[,cat], 
-                         yrep = pp_samples[1:100,,cat], 
-                         group = interaction(df_dep.brms$relation, 
-                                             df_dep.brms$pblue))
+pp_plots <- map(c("bg", "b", "g", "none"), function(cat){
+  map(c("high", "unc", "uncl", "low"), function(pblue){
+    indices <- df_dep.brms$pblue == pblue
+    tit <- switch(cat, "bg" = "bg", "b" = "b¬g", "g" = "¬bg", "none" = "¬b¬g")
+    xlab <- switch(pblue, "high"="H", "unc"="U", 
+                   "uncl"=unname(TeX(c("$U^-$"))), "low"="L")
+    
+    p <- ppc_dens_overlay_grouped(
+      y=df_dep.brms$y[indices, cat], 
+      yrep = pp_samples[1:100, indices, cat], 
+      group = df_dep.brms$relation[indices]
+    ) +
+      labs(x = parse(text=paste("prior_blue:", xlab)), title = tit) +
+      theme(legend.position = "none")
+    ggsave(paste(target_dir, FS, "pp_", cat, "_pblue_", pblue, 
+                 ".png", sep=""), plot = p, width = 5, height=3)
+    return(p)
+  })
+})
 
 
 
