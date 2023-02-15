@@ -63,11 +63,15 @@ var posterior_predictive = map(function(pars){
     var ll_summed = {'ll_x': ll_x_sep.ll_x_blue + ll_x_sep.ll_x_if_bg + ll_x_sep.ll_x_if_nbg,
                      'll_obs': ll_obs_sep.ll_obs_blue + ll_obs_sep.ll_obs_if_bg + ll_obs_sep.ll_obs_if_nbg}
 
-    return(Object.assign({}, ll_x_sep, ll_obs_sep, ll_summed))
+    return(Object.assign({}, ll_x_sep, ll_obs_sep, ll_summed, x_new))
 
   }, observed_ratings)
 
   return({
+    x_blue: _.map(X_new, 'blue'),
+    x_if_bg: _.map(X_new, 'if_bg'),
+    x_if_nbg: _.map(X_new, 'if_nbg'),
+
     ll_X: sum(_.map(X_new, 'll_x')),
     ll_obs: sum(_.map(X_new, 'll_obs')),
 
