@@ -16,6 +16,8 @@ library(ggthemes)
 library(tidybayes)
 library(emmeans)
 library(brms)
+library(latex2exp)
+library(boot)
 
 source(here("R", "helpers-dirichlet-regression.R"))
 # Setup -------------------------------------------------------------------
@@ -77,7 +79,7 @@ df_ind.brms <-  df.brms %>% dplyr::select(subj, pblue, pgreen, relation, y) %>%
          pblue = as.character(pblue),
          pgreen = as.character(pgreen)) %>% 
   filter(relation == "independent")
-brms_formula.ind <- y ~ pblue * pgreen + (1 + pblue + pgreen | subj) 
+brms_formula.ind <- y ~ pblue * pgreen + (1 + pblue * pgreen | subj) 
 priors <- c(set_prior("student_t(3, 0, 2.5)", class = "Intercept"),
             set_prior("normal(0, 1)", class = "b", dpar = "mub"),
             set_prior("normal(0, 1)", class = "b", dpar = "mug"),
@@ -89,13 +91,13 @@ model_ind.pe_task = brm(
   family = "dirichlet",
   formula = brms_formula.ind,
   seed = 0710, 
-  iter = 4000,
+  iter = 8000,
   chains = 4,
   cores = 4,
   warmup = 1000,
   prior = priors,
   control = list(adapt_delta = 0.9, max_treedepth=11),
-  file = paste(target_dir, "model_pe_task_ind_dirichlet.rds", sep = FS)
+  file = paste(target_dir, "model_pe_task_ind_dirichlet_maxreff.rds", sep = FS)
 )
 
 posterior_draws <- tidy_draws(model_ind.pe_task)
@@ -222,7 +224,7 @@ cat <- "green"
 
 # Posterior predictive checks ---------------------------------------------
 pp_samples <- posterior_predict(model_ind.pe_task)
-
+  
 pp_plots <- map(c("bg", "b", "g", "none"), function(cat){
   map(c("high", "unc", "low"), function(pblue){
     indices <- df_ind.brms$pblue == pblue
@@ -238,6 +240,80 @@ pp_plots <- map(c("bg", "b", "g", "none"), function(cat){
     ggsave(paste(target_dir, FS, "pp_", cat, "_pblue_", pblue, 
                  ".png", sep=""), plot = p, width = 5, height=3)
     return(p)
+  })
+})
+
+
+# bootstrapped data
+get_mean_estimates = function(data, i){
+  d2 <- data[i,] %>% as.matrix()
+  return(colMeans(d2))
+}
+N = 1000
+data_bootstrapped = group_map(
+  df_ind.brms %>% group_by(pblue, pgreen), function(df.grp, grp){
+    
+    samples <- boot(df.grp$y %>% as_tibble(),
+                    statistic = get_mean_estimates, R=N)
+    bg = boot.ci(samples, index=c(1), type = "basic", conf=c(0.95))$basic[4:5]
+    b = boot.ci(samples, index=c(2), type = "basic", conf=c(0.95))$basic[4:5]
+    g = boot.ci(samples, index=c(3), type = "basic", conf=c(0.95))$basic[4:5]
+    none = boot.ci(samples, index=c(4), type = "basic", conf=c(0.95))$basic[4:5]
+    
+    cis = rbind(bg, b, g, none)
+    colnames(cis) <- c("lower", "upper")
+    cis %>% as_tibble(rownames=NA) %>% rownames_to_column("world") %>% 
+      add_column(pblue = grp$pblue, pgreen=grp$pgreen)
+  }) %>% bind_rows() %>%  add_column(data = "empiric") %>% 
+  mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
+                        labels = c("bg", "b¬g", "¬bg", "¬b¬g")))
+
+# plots with mean values
+cols <- c("empiric" = "firebrick", "posterior predictive" = "gray")
+pp_plots_means <- map(c("high", "low"), function(pgreen){
+  map(c("high", "unc", "low"), function(pblue){
+    if(!(pgreen == "high" && pblue == "low")){
+      indices_blue <- df_ind.brms$pblue == pblue
+      indices_green <- df_ind.brms$pgreen == pgreen
+      indices <- indices_blue & indices_green
+      
+      pb <- switch(pblue, "high"="H", "unc"="U", "low"="L")
+      pg <- switch(pgreen, "high"="H", "low"="L")
+      tit <- paste("ind:", pb, pg, sep="")
+        
+      means_empiric = colMeans(df_ind.brms$y[indices, ]) %>% 
+        enframe(name = "world", value = "mean_estimate")
+      means_pp = colMeans(colMeans(pp_samples[, indices, ])) %>% 
+        enframe(name = "world", value = "mean_estimate")
+      
+      df <- bind_rows(means_empiric %>% add_column(data = "empiric"),
+                      means_pp %>% add_column(data = "posterior predictive")) %>% 
+        mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
+                              labels = c("bg", "b¬g", "¬bg", "¬b¬g")))
+      
+      # compute highest posterior predictive density interval
+      pp_means <- apply(pp_samples[,indices,], c(1,3), mean)
+      pp_hdis <- apply(pp_means, c(2), tidybayes::hdi, .width=0.95 ) %>% 
+       as_tibble() %>% add_column(limit=c("lower", "upper")) %>% 
+        pivot_longer(cols = -limit, names_to = "world", values_to="val") %>% 
+        pivot_wider(names_from = "limit", values_from = "val") %>% 
+        add_column(data = "posterior predictive") %>% 
+        mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
+                              labels = c("bg", "b¬g", "¬bg", "¬b¬g")))
+      
+      p <- df %>% 
+        ggplot(aes(x = world, group = data, color=data, fill=data)) +
+        geom_point(aes(y = mean_estimate)) + geom_line(aes(y = mean_estimate)) + 
+        geom_ribbon(data = data_bootstrapped %>% 
+                      filter(pblue == !!pblue & pgreen == !!pgreen), 
+                    aes(ymin=lower, ymax=upper), alpha=0.5) +
+        scale_color_manual(values = cols) +
+        geom_ribbon(data = pp_hdis,aes(ymin=lower, ymax=upper), alpha=0.5) +
+        labs(title = tit)
+        
+      ggsave(paste(target_dir, FS, "pp_", str_replace(tit, ":", "_"), ".png", sep=""), plot = p)
+    return(p)
+    }
   })
 })
 
