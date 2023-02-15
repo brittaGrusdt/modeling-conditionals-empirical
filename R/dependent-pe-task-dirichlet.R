@@ -16,6 +16,8 @@ library(ggthemes)
 library(tidybayes)
 library(emmeans)
 library(brms)
+library(latex2exp)
+library(boot)
 
 source(here("R", "helpers-dirichlet-regression.R"))
 # Setup -------------------------------------------------------------------
@@ -76,7 +78,7 @@ df_dep.brms <- df.brms %>% dplyr::select(subj, pblue, relation , y) %>%
   filter(relation != "independent") %>% 
   mutate(pblue = factor(pblue, levels = c("high", "unc", "uncl", "low")))
   
-brms_formula.dep <- y ~ pblue * relation + (1 + pblue + relation | subj) 
+brms_formula.dep <- y ~ pblue * relation + (1 + pblue * relation | subj) 
 # look at default priors
 # get_prior(brms_formula.dep, data = df_dep.brms, family = "dirichlet")
 
@@ -92,13 +94,13 @@ model_dep.pe_task = brm(
   family = "dirichlet",
   formula = brms_formula.dep,
   seed = 0710, 
-  iter = 4000,
+  iter = 8000,
   chains = 4,
   cores = 4,
   warmup = 1000,
   prior = priors,
   control = list(adapt_delta = 0.9, max_treedepth=11),
-  file = paste(target_dir, "model_pe_task_dep_dirichlet.rds", sep = FS)
+  file = paste(target_dir, "model_pe_task_dep_dirichlet_maxreff.rds", sep = FS)
 )
 
 posterior_draws <- tidy_draws(model_dep.pe_task)
@@ -193,32 +195,30 @@ posterior_if_nbg =  plot_posterior_prob(posterior_samples.probs %>%
 
 # posterior probabilities hypotheses
 # P(bg) estimated given prior blue: high>unc>uncl>low
-cat <- "bg"
 posterior_samples.probs %>% 
-  dplyr::select(rowid, relation, prior_blue, !!cat) %>% 
+  dplyr::select(rowid, relation, prior_blue, "bg") %>% 
   group_by(rowid, relation) %>% 
-  pivot_wider(names_from = "prior_blue", values_from = !!cat) %>% 
+  pivot_wider(names_from = "prior_blue", values_from = "bg") %>% 
   group_by(relation) %>% 
   summarize(high_unc = mean(high > unc),
             high_uncl = mean(high > uncl),
             unc_uncl = mean(unc > uncl),
             unc_low = mean(unc > low),
             uncl_low = mean(uncl > low)) %>% 
-  add_column(response = !!cat)
+  add_column(response = "bg")
 
 
-cat <- "none"
 posterior_samples.probs %>% 
-  dplyr::select(rowid, relation, prior_blue, !!cat) %>% 
+  dplyr::select(rowid, relation, prior_blue, "none") %>% 
   group_by(rowid, relation) %>% 
-  pivot_wider(names_from = "prior_blue", values_from = !!cat) %>% 
+  pivot_wider(names_from = "prior_blue", values_from = "none") %>% 
   group_by(relation) %>% 
   summarize(high_unc = mean(high < unc), 
             high_uncl = mean(high < uncl), 
             unc_uncl = mean(unc < uncl),
             unc_low = mean(unc < low),
             uncl_low = mean(uncl < low)) %>% 
-  add_column(response = !!cat)
+  add_column(response = "none")
 
 
 # Posterior predictive checks ---------------------------------------------
@@ -245,11 +245,80 @@ pp_plots <- map(c("bg", "b", "g", "none"), function(cat){
 })
 
 
+# bootstrapped data
+get_mean_estimates = function(data, i){
+  d2 <- data[i,] %>% as.matrix()
+  return(colMeans(d2))
+}
+N = 1000
+data_bootstrapped = group_map(
+  df_dep.brms %>% group_by(pblue, relation), function(df.grp, grp){
+    
+    samples <- boot(df.grp$y %>% as_tibble(),
+                    statistic = get_mean_estimates, R=N)
+    bg = boot.ci(samples, index=c(1), type = "basic", conf=c(0.95))$basic[4:5]
+    b = boot.ci(samples, index=c(2), type = "basic", conf=c(0.95))$basic[4:5]
+    g = boot.ci(samples, index=c(3), type = "basic", conf=c(0.95))$basic[4:5]
+    none = boot.ci(samples, index=c(4), type = "basic", conf=c(0.95))$basic[4:5]
+    
+    cis = rbind(bg, b, g, none)
+    colnames(cis) <- c("lower", "upper")
+    cis %>% as_tibble(rownames=NA) %>% rownames_to_column("world") %>% 
+      add_column(pblue = grp$pblue, relation = grp$relation)
+  }) %>% bind_rows() %>%  add_column(data = "empiric") %>% 
+  mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
+                        labels = c("bg", "b¬g", "¬bg", "¬b¬g")))
 
-
-
-
-
+# plots with mean values
+cols <- c("empiric" = "firebrick", "posterior predictive" = "gray")
+pp_plots_means <- map(c("if1", "if2"), function(relation){
+  map(c("high", "unc", "uncl", "low"), function(pblue){
+    indices_rel <- df_dep.brms$relation == relation
+    indices_blue <- df_dep.brms$pblue == pblue
+    indices <- indices_blue & indices_rel
+    cond <- paste(relation, pblue, sep="_")
+    tit <- switch(cond, "if1_high"=expression("if"[1]*":HI"), 
+                        "if1_unc"=expression(paste(`if`[1], ":UI")),
+                        "if1_uncl"=expression("if"[1]*":U"^-{}*"I"),
+                        "if1_low"=expression("if"[1]*":LI"),
+                        "if2_high"=expression("if"[2]*":HL"), 
+                        "if2_unc"=expression("if"[2]*":UL"),
+                        "if2_uncl"=expression("if"[2]*":U"^-{}*"L"),
+                        "if2_low"=expression("if"[2]*":LL"))
+    
+    means_empiric = colMeans(df_dep.brms$y[indices, ]) %>% 
+      enframe(name = "world", value = "mean_estimate")
+    means_pp = colMeans(colMeans(pp_samples[, indices, ])) %>% 
+      enframe(name = "world", value = "mean_estimate")
+    
+    df <- bind_rows(means_empiric %>% add_column(data = "empiric"),
+                    means_pp %>% add_column(data = "posterior predictive")) %>% 
+      mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
+                            labels = c("bg", "b¬g", "¬bg", "¬b¬g")))
+    
+    # compute highest posterior predictive density interval
+    pp_means <- apply(pp_samples[,indices,], c(1,3), mean)
+    pp_hdis <- apply(pp_means, c(2), tidybayes::hdi, .width=0.95 ) %>% 
+      as_tibble() %>% add_column(limit=c("lower", "upper")) %>% 
+      pivot_longer(cols = -limit, names_to = "world", values_to="val") %>% 
+      pivot_wider(names_from = "limit", values_from = "val") %>% 
+      add_column(data = "posterior predictive") %>% 
+      mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
+                            labels = c("bg", "b¬g", "¬bg", "¬b¬g")))
+    p <- df %>% 
+      ggplot(aes(x = world, group = data, color=data, fill=data)) +
+      geom_point(aes(y = mean_estimate)) + geom_line(aes(y = mean_estimate)) + 
+      geom_ribbon(data = data_bootstrapped %>% 
+                    filter(pblue == !!pblue & relation == !!relation), 
+                  aes(ymin=lower, ymax=upper), alpha=0.5) +
+      scale_color_manual(values = cols) +
+      geom_ribbon(data = pp_hdis,aes(ymin=lower, ymax=upper), alpha=0.5) +
+      ggtitle(tit)
+    
+      ggsave(paste(target_dir, FS, "pp_", cond, ".png", sep=""), plot = p)
+    return(p)
+  })
+})
 
 ######## DIRICHLET REGRESSION TESTS #######################################
 
