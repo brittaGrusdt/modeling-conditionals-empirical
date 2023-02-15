@@ -80,7 +80,6 @@ posterior_samples.dep = map_dfr(dep_trials, function(trial_id){
     program_file = here("webppl-model", "posterior-dependent-data.wppl"),
     data_var = "data",
     model_var = "non_normalized_posterior",
-    random_seed = params$seed_webppl,
     data = data_webppl,
     packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
     inference_opts = list(method = "MCMC",
@@ -95,6 +94,27 @@ posterior_samples.dep = map_dfr(dep_trials, function(trial_id){
     add_column(id = trial_id)
   
   return(samples.posterior)
+})
+save_data(posterior_samples.dep, paste(target_dir, "posterior_samples.rds", sep=FS))
+
+# Chain Plots
+df <- posterior_samples.dep %>% 
+  mutate(Chain = as.factor(Chain)) %>% 
+  pivot_longer(cols=c(-Iteration, -Chain, -id), names_to = "param")
+
+plots_chains = map(c("alpha", "gamma", "shape1", "shape2"), function(par){
+  plots = map(c("blue", "if_bg", "if_nbg"), function(p) {
+    fn <- paste(par, p, sep="_")
+    p <- df %>% 
+      filter(startsWith(param, fn)) %>% 
+      ggplot(aes(x=Iteration, y = value, color=Chain, group = Chain)) + 
+      geom_line() + facet_wrap(id~param, scales="free")
+    
+    ggsave(paste(target_dir, FS, paste(fn, ".png", sep = ""), sep=""), p)
+    
+    return(p)                 
+  })
+  return(plots)
 })
 
 pars <- c("alpha_blue", "gamma_blue", "shape1_blue", "shape2_blue", 
@@ -116,70 +136,74 @@ save_data(evs.posterior.dep,
 
 # Generate new dependent tables -------------------------------------------
 # get Posterior predictive data
-# generate set of dependent tables with expected values of posterior distributions
+# generate set of dependent tables for each sample from posterior distribution (parameters)
 sampled_tables = map_dfr(dep_trials, function(trial_id){
   message(trial_id)
+  samples_trial <- posterior_samples.dep %>% filter(id == trial_id) %>% 
+    filter(Iteration <= 100) #just use the first 100 samples, not all
+  #samples_trial <- evs.posterior.dep %>% filter(id == trial_id) #use evs
+  data_trial <- df.dep %>% filter(id == trial_id)
   
-  samples_trial <- posterior_samples %>% fitler(id == trial_id)
   map(seq(1, nrow(samples_trial)), function(idx){
     
     posterior_params <- samples_trial[idx,]
-    data_trial <- df.dep %>% filter(id == trial_id)
     data_webppl <- list(probs = data_trial,
-                        #probs = df.dep %>% filter(id == trial_id),
                         evs_params = posterior_params)
-                        #evs_params = evs.posterior.dep %>% filter(id == trial_id))
-    
+
     samples.dep_tables <- webppl(
       program_file = here("webppl-model", "posterior-dependent-data.wppl"),
-      random_seed = params$seed_webppl,
       data_var = "data",
       model_var = "sample_table",
       data = data_webppl,
       packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
       inference_opts = list(method = "forward", samples = nrow(data_trial))
-                            #samples = 1000)
     ) %>% as_tibble() %>% 
       pivot_wider(names_from = "Parameter", values_from = "value") %>% 
       add_column(id = trial_id)
   })
 })
+save_data(sampled_tables, 
+          paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
 
-# plot new tables sampled for each dependent context with observed data
-df.samples <- sampled_tables %>% 
-  pivot_longer(cols = c(AC, `A-C`, `-AC`, `-A-C`), 
-               names_to = "cell", values_to = "value")
-
-df.behav.long = df.dep %>% 
-  dplyr::select(AC, `A-C`, `-AC`, `-A-C`, prolific_id, id) %>% 
-  pivot_longer(cols = c(AC, `A-C`, `-AC`, `-A-C`), 
-               names_to = "cell", values_to = "value") 
-
-colors <- c("empirical" = "darkgreen", "sampled" = "firebrick")
 plots_new_tables <- map(dep_trials, function(trial_id){
+  df.trial <- df.dep %>% filter(id == trial_id)
+  N = nrow(df.trial)
+  grp <- rep(factor(c("bg", "b¬g", "¬gb", "¬b¬g"),
+                    levels = c("bg", "b¬g", "¬gb", "¬b¬g")), N)
+  trial_behav.mat <- df.trial %>% dplyr::select(AC, `A-C`, `-AC`, `-A-C`) %>%
+    as.matrix()
+  trial_behav <- c(t(trial_behav.mat))
+
+  trial_samples.mat <- sampled_tables %>% filter(id == trial_id) %>% 
+    dplyr::select(AC, `A-C`, `-AC`, `-A-C`) %>% as.matrix()
+  N_rep <- dim(trial_samples.mat)[1]/N
+  yrep <- matrix(data=NA, nrow=N_rep, N*4)
   
-  trial.behav <- df.behav.long %>% filter(id == trial_id) %>% 
-    dplyr::select(id, cell, value) %>% add_column(data = "empirical")
-  trial.samples <- df.samples %>% filter(id == trial_id) %>% 
-    dplyr::select(id, cell, value) %>% add_column(data = "sampled")
-  df.trial <- bind_rows(trial.behav, trial.samples)
+  # N_rep x N samples
+  for(i in seq(0, N_rep-1)){
+      i_low <- i*N + 1
+      i_up <- (i+1)*N
+      
+    vec <- c(t(trial_samples.mat[i_low:i_up, ]))
+    for(j in seq(1, length(vec))){
+      yrep[i + 1, j] <- vec[j]
+    }
+  }
+
+  tit <- switch(trial_id, 
+                "if1_hh"=expression("if"[1]*":HI"), 
+                "if1_uh"=expression(paste(`if`[1], ":UI")),
+                "if1_u-Lh"=expression("if"[1]*":U"^-{}*"I"),
+                "if1_lh"=expression("if"[1]*":LI"),
+                "if2_hl"=expression("if"[2]*":HL"), 
+                "if2_ul"=expression("if"[2]*":UL"),
+                "if2_u-Ll"=expression("if"[2]*":U"^-{}*"L"),
+                "if2_ll"=expression("if"[2]*":LL"))
   
-  evs.behav <- trial.behav %>% group_by(id, cell) %>% 
-    summarize(value = mean(value), .groups = "drop_last") %>% 
-    add_column(data = "empirical")
-  evs.samples <- trial.samples %>% group_by(id, cell) %>% 
-    summarize(value = mean(value), .groups = "drop_last") %>% 
-    add_column(data = "sampled")
-  df.evs <- bind_rows(evs.behav, evs.samples)
-  
-  p <-  df.trial %>% 
-    ggplot(aes(x=value)) + geom_density(aes(color = data)) + 
-    geom_point(data = df.evs, aes(y = 0, color = data), size = 2) +
-    facet_wrap(~fct_rev(cell), ncol=2, scales = "free") +
-    labs(title = trial_id) +
-    scale_color_manual(name = "data", values = colors) + 
-    theme_minimal() +
-    theme(legend.position = "top")
+  p <- ppc_dens_overlay_grouped(y=trial_behav, yrep = yrep, group = grp) +
+    theme(panel.spacing = unit(2, "lines")) + ggtitle(tit)
+  ggsave(paste(target_dir, FS, 
+               paste("pp-tables-evs-posterior-", trial_id, ".png"), sep=""), p)
   return(p)
 })
 
@@ -199,7 +223,10 @@ ll_fn <- function(df.samples, df.grp){
     packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS))
   ) 
   
-  result = tibble(ll_X_new = samples.pp$ll_X, 
+  result = tibble(x_blue = samples.pp$x_blue,
+                  x_if_bg = samples.pp$x_if_bg,
+                  x_if_nbg = samples.pp$x_if_nbg,
+                  ll_X_new = samples.pp$ll_X, 
                   ll_obs = samples.pp$ll_obs, 
                   ll_X_blue = samples.pp$ll_x_blue, 
                   ll_X_if_bg = samples.pp$ll_x_if_bg, 
@@ -238,7 +265,8 @@ ggsave(paste(target_dir, "pp-log-likelihood-dependent.png", sep = FS), p.all)
 
 # log likelihood seperate for P(b), P(g|b) and P(g|¬b)
 pp_samples_ll.long <- pp_samples_ll %>%
-  pivot_longer(cols = c(-id), names_to = "prob", names_prefix = "ll_", 
+  pivot_longer(cols = c(-id, -x_blue, -x_if_bg, -x_if_nbg), 
+               names_to = "prob", names_prefix = "ll_", 
                values_to = "ll")
 # ll pp-samples
 df.ll_X = pp_samples_ll.long %>% 
@@ -272,5 +300,31 @@ p.if2 <- df.ll_X %>% filter(startsWith(id, "if2")) %>%
   labs(x = "log likelihood", y = "density")
 p.if2
 
+
+# posterior predictive plots (new sampled data for the 3 probabilities)
+df.pp_x <- pp_samples_ll %>% dplyr::select(x_blue, x_if_bg, x_if_nbg, id) %>% 
+  group_by(id) %>% #, idx_sample) %>% 
+  unnest(cols=c(starts_with("x_"))) %>% 
+  mutate(idx_sample = seq_along(id)) %>% 
+  filter(idx_sample <= 100) %>% 
+  mutate(x_if_bg = case_when(is.na(x_if_bg) ~ -1, T ~ x_if_bg),
+         x_if_nbg = case_when(is.na(x_if_nbg) ~ -1, T ~ x_if_nbg))
+         
+group_map(df.pp_x %>% group_by(id), function(df, grp){
+  message(grp$id)
+  df.trial <- df.dep %>% filter(id == grp$id) %>% 
+    mutate(if_bg = case_when(is.na(if_bg) ~ -1, T ~ if_bg),
+           if_nbg = case_when(is.na(if_nbg) ~ -1, T ~ if_nbg)) %>% 
+    rowid_to_column("idx_subj")
+  
+  map(c("x_blue", "x_if_bg", "x_if_nbg"), function(p){
+    y_rep <- df %>% pull(p) %>% matrix(nrow=100, ncol=nrow(df.trial), byrow = T)
+    p_str <- str_replace(p, "x_", "")
+    y <- df.trial %>% pull(p_str) 
+    p <- ppc_dens_overlay(y=y, yrep=y_rep) + labs(title=paste(grp$id, p_str, sep=": "))
+    ggsave(paste(target_dir, paste("pp_zoib_", grp$id, "_", p_str, ".png", sep=""), sep=FS), p)
+    return(NA)
+  })
+})
 
 
