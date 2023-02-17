@@ -18,24 +18,15 @@ library(emmeans)
 library(brms)
 
 # for plots
-p_cols = c("blue" = "blue4",
-          "green" = "forestgreen", 
-          "if_bg" = "hotpink1", 
-          "if_gb" = "sienna1" , 
-          "if_nbg" = "deeppink3", 
-          "if_ngb" = "orangered3", 
-          "AC" = "deepskyblue", 
-          "A-C" = "mediumblue", 
-          "-AC" = "darkorange", 
-          "-A-C" = "lightcoral")
-
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
+
 # Data --------------------------------------------------------------------
-active_config = "context_free_prior"
+active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 
-target_dir = paste(here(params$dir_results), "dependent-contexts", sep=FS)
+target_dir = paste(here(params$dir_results), "dependent-contexts",
+                   "zoib-model", sep=FS)
 if(!dir.exists(target_dir)) dir.create(target_dir, recursive = T)
 
 data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
@@ -110,7 +101,7 @@ plots_chains = map(c("alpha", "gamma", "shape1", "shape2"), function(par){
       ggplot(aes(x=Iteration, y = value, color=Chain, group = Chain)) + 
       geom_line() + facet_wrap(id~param, scales="free")
     
-    ggsave(paste(target_dir, FS, paste(fn, ".png", sep = ""), sep=""), p)
+    ggsave(paste(target_dir, FS, paste("chains_", fn, ".png", sep = ""), sep=""), p)
     
     return(p)                 
   })

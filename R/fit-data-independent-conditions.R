@@ -15,7 +15,7 @@ library(tidyselect)
 source(here("R", "fit-data-helper-functions.R"))
 
 # Data --------------------------------------------------------------------
-active_config = "context_free_prior"
+active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 

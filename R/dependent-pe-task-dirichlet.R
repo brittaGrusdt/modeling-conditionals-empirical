@@ -21,25 +21,15 @@ library(boot)
 
 source(here("R", "helpers-dirichlet-regression.R"))
 # Setup -------------------------------------------------------------------
-p_cols = c("blue" = "blue4",
-                  "green" = "forestgreen", 
-                  "if_bg" = "hotpink1", 
-                  "if_gb" = "sienna1" , 
-                  "if_nbg" = "deeppink3", 
-                  "if_ngb" = "orangered3", 
-                  "AC" = "deepskyblue", 
-                  "A-C" = "mediumblue", 
-                  "-AC" = "darkorange", 
-                  "-A-C" = "lightcoral")
-
 dep_r_names <- c("if1" = "IF[1]", "if2" = "IF[2]")
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
 # Data --------------------------------------------------------------------
-active_config = "context_free_prior"
+active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 
-target_dir = paste(here(params$dir_results), "dependent-contexts", sep=FS)
+target_dir = paste(here(params$dir_results), "dependent-contexts",
+                   "dirichlet-regression-model", sep=FS)
 if(!dir.exists(target_dir)) dir.create(target_dir, recursive = T)
 
 data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
@@ -84,9 +74,9 @@ brms_formula.dep <- y ~ pblue * relation + (1 + pblue * relation | subj)
 
 # constrain priors for regression coefficients
 priors <- c(set_prior("student_t(3, 0, 2.5)", class = "Intercept"),
-            set_prior("normal(0, 1)", class = "b", dpar = "mub"),
-            set_prior("normal(0, 1)", class = "b", dpar = "mug"),
-            set_prior("normal(0, 1)", class = "b", dpar = "munone"))
+            set_prior("normal(0, 2.5)", class = "b", dpar = "mub"),
+            set_prior("normal(0, 2.5)", class = "b", dpar = "mug"),
+            set_prior("normal(0, 2.5)", class = "b", dpar = "munone"))
             
 
 model_dep.pe_task = brm(
@@ -144,10 +134,16 @@ posterior_samples.probs = bind_rows(
 # Plot posterior ----------------------------------------------------------
 plot_posterior_prob = function(posterior_samples.probs, x, lab_x){
   plot.posterior = posterior_samples.probs %>% 
+    mutate(relation = factor(relation, levels = c("if1", "if2"),
+                             labels = c(parse(text = expression("if"[1])),
+                                        parse(text = expression("if"[2])))),
+           prior_blue = factor(prior_blue,
+                               levels = c("low", "uncl", "unc", "high"),
+                               labels = c("L", "U^-", "U", "H"))) %>% 
     ggplot(aes(x=get(x), fill=prior_blue)) + 
     stat_halfeye(.width = c(0.95), point_interval = "mean_hdi") +
-    facet_wrap(~relation, labeller = labeller(relation = dep_r_names, 
-                                              .default = label_parsed)) +
+    facet_wrap(~relation, labeller = label_parsed) +
+    scale_fill_discrete(labels = unname(TeX(c("L", "$U^-$", "U", "H")))) + 
     labs(x = lab_x, y = "") 
   return(plot.posterior)
 }
@@ -158,21 +154,13 @@ posterior_cells = plot_posterior_prob(
                                            names_to = "world",
                                            values_to = "p_hat") %>% 
     mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
-                          labels = c("bg", "b¬g", "¬bg", "¬b¬g")),
-           relation=factor(relation, levels = c("if1", "if2"), 
-                           labels = c("IF[1]", "IF[2]")),
-           prior_blue = factor(prior_blue,
-                               levels = c("low", "uncl", "unc", "high"),
-                               labels = c("L", "U^-", "U", "H"))),
+                          labels = c("bg", "b¬g", "¬bg", "¬b¬g"))),
   "p_hat", "Estimated probability"
 ) + facet_grid(relation~world, labeller = labeller(relation = label_parsed)) +
-  scale_fill_discrete(labels = unname(TeX(c("L", "$U^-$", "U", "H")))) +   
   theme(panel.spacing = unit(2, "lines"))
-
+posterior_cells
 ggsave(paste(target_dir, "posterior_cells.png", sep=FS), 
        plot = posterior_cells, width = 12)
-
-
 
 
 posterior_blue = plot_posterior_prob(posterior_samples.probs, "blue", "P(b)")

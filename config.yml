@@ -34,7 +34,6 @@ default:
                            "-C implies A_unif-high-low")
   causal_nets_ind: !expr c("A || C_unif-unif")
   cns: !expr c("A implies C", "C implies A", "A implies -C", "C implies -A", "A || C")
-  #dir_packages: !expr c(paste("webppl-model", "node_modules", sep = .Platform$file.sep))
   packages:  !expr c(paste("webppl-model", "node_modules", 
                            "conditionalsHelpers", sep = .Platform$file.sep),
                      paste("webppl-model", "node_modules", 
@@ -69,32 +68,9 @@ recleaned_data:
   fn_recleaned_data: "recleaned-data.csv"
 
 
-
-# abstract_state_prior:
-#   dir_results: !expr paste("results", "abstract-prior", sep=.Platform$file.sep)
-#   fn_tables: "tables-abstract-prior-toWPPL.rds"
-#   fn_tables_with_empiric: "tables-abstract-prior-toWPPL-with-empirical.rds"
-#   fn_params_tables: "params-tables-abstract-prior.rds"
-#   fn_utterances: "utterances-abstract-prior.rds"
-#   fn_tables_mapping: "mapping-tables-abstract-prior-ids.rds"
-#   fn_uniq_tables: "tables-abstract-prior-unique-toWPPL.rds"
-#   #n_best_latent: 3
-#   seed_tables: 202008
-#   n_ind_tables: 6000
-#   n_dep_tables: 1500
-#   indep_sigma: 0.005
-#   beta_neg_a: 1
-#   beta_neg_b: 10
-#   beta_pos_a: 10
-#   beta_pos_b: 1
-#   beta_marg_a: 1
-#   beta_marg_b: 1
-
-context_free_prior:
-  dir_results: !expr paste("results", "context-free-prior", sep=.Platform$file.sep)
-#abstract_default_params:
-  #inherits: abstract_state_prior
-  name: "context-free-prior"
+default_prior:
+  dir_results: !expr paste("results", "default-prior", sep=.Platform$file.sep)
+  name: "default-prior"
   fit_ind_prior_mu: !expr list(mu = 0, sigma = 1, width = 0.01)
   fit_ind_prior_sigma: !expr list(a = 0, b = 0.5, width = 0.01)
   noise_shape1: 1
@@ -126,18 +102,12 @@ context_free_prior:
   fn_kl_divergences: "best-kl-divergences.rds"
 
 cf_prior_match_tables:
-  inherits: context_free_prior
+  inherits: default_prior
   match_by: "tables"
 
 cf_prior_match_kl:
-  inherits: context_free_prior
+  inherits: default_prior
   match_by: "KL-divergence"
 
-
-context_sensitive_prior:
-  dir_results: !expr paste("results", "context-sensitive-prior", sep=.Platform$file.sep)
-  name: "context-sensitive-prior"
-  fn_fitted_alphas: "params-fitted-single-dirichlet.csv"
-  fn_fitted_alphas_by_context: "params-fitted-dirichlet.csv"
 
 # there needs to be 1 blank final line!

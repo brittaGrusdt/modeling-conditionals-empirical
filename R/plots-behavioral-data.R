@@ -51,8 +51,6 @@ data.uc = cleaned_data %>%
                 utt_type, uc_task, utt.standardized, pe_task.smooth, pe_task, 
                 cost.uc) %>% 
   mutate(conditional = case_when(utt_type != "conditional" ~ 0, T ~ 1),
-         # prior_blue_agg = case_when(as.character(prior_blue) %in% c("unc", "uncl") ~ "unc",
-         #                            T ~ "confident"),
          prior_blue_agg = case_when(as.character(prior_blue) == "unc" ~ "unc", 
                                     as.character(prior_blue) == "uncl" ~ "uncl",
                                     T ~ "confident"),
@@ -107,20 +105,6 @@ pe_task.means =  pe_data.long %>% group_by(id, relation, world) %>%
 pe_task.means$world <- recode_factor(pe_task.means$world, 
                                      `ac` = "bg", `a-c` = "b¬g", 
                                      `-ac` = "¬bg", `-a-c` = "¬b¬g")
-# 
-# id_names <- c("if1_hh"=expression("if"[1]*":HI"), 
-#               "if1_uh"=expression(paste(`if`[1], ":UI")),
-#               "if1_u-Lh"=expression("if"[1]*":U"^-{}*"I"),
-#               "if1_lh"=expression("if"[1]*":LI"),
-#               "if2_hl"=expression("if"[2]*":HL"), 
-#               "if2_ul"=expression("if"[2]*":UL"),
-#               "if2_uncl"=expression("if"[2]*":U"^-{}*"L"),
-#               "if2_low"=expression("if"[2]*":LL"),
-#               `ind_hh` = 'ind:HH',
-#               `ind_uh` = 'ind:UH',
-#               `ind_hl` = 'ind:HL',
-#               `ind_ul` = 'ind:UL',
-#               `ind_ll` = 'ind:LL')
 
 p.means_pe = pe_task.means %>% 
   mutate(relation = factor(relation, levels = c("if1", "if2", "independent"), 

@@ -21,24 +21,15 @@ library(boot)
 
 source(here("R", "helpers-dirichlet-regression.R"))
 # Setup -------------------------------------------------------------------
-p_cols = c("blue" = "blue4",
-                  "green" = "forestgreen", 
-                  "if_bg" = "hotpink1", 
-                  "if_gb" = "sienna1" , 
-                  "if_nbg" = "deeppink3", 
-                  "if_ngb" = "orangered3", 
-                  "AC" = "deepskyblue", 
-                  "A-C" = "mediumblue", 
-                  "-AC" = "darkorange", 
-                  "-A-C" = "lightcoral")
-
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
+
 # Data --------------------------------------------------------------------
-active_config = "context_free_prior"
+active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 
-target_dir = paste(here(params$dir_results), "independent-contexts", sep=FS)
+target_dir = paste(here(params$dir_results), "independent-contexts",
+                   "dirichlet-regression-model", sep=FS)
 if(!dir.exists(target_dir)) dir.create(target_dir, recursive = T)
 
 data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
@@ -81,9 +72,9 @@ df_ind.brms <-  df.brms %>% dplyr::select(subj, pblue, pgreen, relation, y) %>%
   filter(relation == "independent")
 brms_formula.ind <- y ~ pblue * pgreen + (1 + pblue * pgreen | subj) 
 priors <- c(set_prior("student_t(3, 0, 2.5)", class = "Intercept"),
-            set_prior("normal(0, 1)", class = "b", dpar = "mub"),
-            set_prior("normal(0, 1)", class = "b", dpar = "mug"),
-            set_prior("normal(0, 1)", class = "b", dpar = "munone"))
+            set_prior("normal(0, 2.5)", class = "b", dpar = "mub"),
+            set_prior("normal(0, 2.5)", class = "b", dpar = "mug"),
+            set_prior("normal(0, 2.5)", class = "b", dpar = "munone"))
 
 # Model independent contexts ----------------------------------------------
 model_ind.pe_task = brm(

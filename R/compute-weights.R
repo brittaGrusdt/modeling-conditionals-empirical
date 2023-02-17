@@ -16,7 +16,7 @@ cell_names <- c(
 colors <- c(`empirical slider ratings` = "darkgreen", `model states` = "firebrick")
 # Setup -------------------------------------------------------------------
 # Priors
-active_config = "context_free_prior"
+active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 
 params <- config::get()

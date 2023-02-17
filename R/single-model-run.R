@@ -12,7 +12,7 @@ theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 
 # Setup -------------------------------------------------------------------
 # Priors
-active_config = "context_free_prior"
+active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 
 params <- config::get()

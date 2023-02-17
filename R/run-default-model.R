@@ -14,7 +14,6 @@ source(here("R", "prediction-functions.R"))
 # Prior
 # active_config = "cf_prior_match_tables"
 active_config = "cf_prior_match_kl"
-# active_config = "context_sensitive_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 if(!dir.exists(params$dir_results)) dir.create(params$dir_results, recursive = T)
