@@ -17,8 +17,19 @@ library(tidybayes)
 library(emmeans)
 library(brms)
 
+source(here("R", "helpers-data-models.R"))
+
 # for plots
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
+trial_names <- c("if1_hh"=expression("if"[1]*":HI"),
+                 "if1_uh"=expression(paste(`if`[1], ":UI")),
+                 "if1_u-Lh"=expression("if"[1]*":U"^-{}*"I"),
+                 "if1_lh"=expression("if"[1]*":LI"),
+                 "if2_hl"=expression("if"[2]*":HL"),
+                 "if2_ul"=expression("if"[2]*":UL"),
+                 "if2_u-Ll"=expression("if"[2]*":U"^-{}*"L"),
+                 "if2_ll"=expression("if"[2]*":LL"))
+prob_names <- c("blue"="P(b)", "if_bg" = "P(g|b)", "if_nbg"="P(g|¬b)")
 
 # Data --------------------------------------------------------------------
 active_config = "default_prior"
@@ -156,49 +167,22 @@ sampled_tables = map_dfr(dep_trials, function(trial_id){
 save_data(sampled_tables, 
           paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
 
-plots_new_tables <- map(dep_trials, function(trial_id){
+pp_plots_new_tables <- map(dep_trials, function(trial_id){
   df.trial <- df.dep %>% filter(id == trial_id)
-  N = nrow(df.trial)
-  grp <- rep(factor(c("bg", "b¬g", "¬gb", "¬b¬g"),
-                    levels = c("bg", "b¬g", "¬gb", "¬b¬g")), N)
-  trial_behav.mat <- df.trial %>% dplyr::select(AC, `A-C`, `-AC`, `-A-C`) %>%
-    as.matrix()
-  trial_behav <- c(t(trial_behav.mat))
-
-  trial_samples.mat <- sampled_tables %>% filter(id == trial_id) %>% 
-    dplyr::select(AC, `A-C`, `-AC`, `-A-C`) %>% as.matrix()
-  N_rep <- dim(trial_samples.mat)[1]/N
-  yrep <- matrix(data=NA, nrow=N_rep, N*4)
-  
-  # N_rep x N samples
-  for(i in seq(0, N_rep-1)){
-      i_low <- i*N + 1
-      i_up <- (i+1)*N
-      
-    vec <- c(t(trial_samples.mat[i_low:i_up, ]))
-    for(j in seq(1, length(vec))){
-      yrep[i + 1, j] <- vec[j]
-    }
-  }
-
-  tit <- switch(trial_id, 
-                "if1_hh"=expression("if"[1]*":HI"), 
-                "if1_uh"=expression(paste(`if`[1], ":UI")),
-                "if1_u-Lh"=expression("if"[1]*":U"^-{}*"I"),
-                "if1_lh"=expression("if"[1]*":LI"),
-                "if2_hl"=expression("if"[2]*":HL"), 
-                "if2_ul"=expression("if"[2]*":UL"),
-                "if2_u-Ll"=expression("if"[2]*":U"^-{}*"L"),
-                "if2_ll"=expression("if"[2]*":LL"))
-  
-  p <- ppc_dens_overlay_grouped(y=trial_behav, yrep = yrep, group = grp) +
-    theme(panel.spacing = unit(2, "lines")) + ggtitle(tit)
-  ggsave(paste(target_dir, FS, 
-               paste("pp-tables-evs-posterior-", trial_id, ".png"), sep=""), p)
+    tit <- switch(trial_id,
+                  "if1_hh"=expression("if"[1]*":HI"),
+                  "if1_uh"=expression(paste(`if`[1], ":UI")),
+                  "if1_u-Lh"=expression("if"[1]*":U"^-{}*"I"),
+                  "if1_lh"=expression("if"[1]*":LI"),
+                  "if2_hl"=expression("if"[2]*":HL"),
+                  "if2_ul"=expression("if"[2]*":UL"),
+                  "if2_u-Ll"=expression("if"[2]*":U"^-{}*"L"),
+                  "if2_ll"=expression("if"[2]*":LL"))
+  fn <- paste(target_dir, FS, paste("pp-tables-evs-posterior-", trial_id, 
+                                    ".png", sep=""), sep="")
+  p <- plot_new_tables(df.trial, sampled_tables, tit, fn)
   return(p)
 })
-
-plots_new_tables
 
 # Posterior predictive ----------------------------------------------------
 # Log likelihood plots
@@ -228,35 +212,33 @@ ll_fn <- function(df.samples, df.grp){
   return(result %>% add_column(id = df.grp$id))
 }
 pp_samples_ll = group_map(posterior_samples.dep %>% group_by(id), ll_fn) %>%
-  bind_rows()
+  bind_rows() %>% 
+  mutate(trial=id, 
+         id = factor(id, levels = c("if1_hh", "if1_uh", "if1_u-Lh", "if1_lh",
+                                    "if2_hl", "if2_ul", "if2_u-Ll", "if2_ll"),
+                     labels = c(parse(text=expression("if"[1]*":HI")),
+                                parse(text=expression(paste(`if`[1], ":UI"))),
+                                parse(text=expression("if"[1]*":U"^-{}*"I")),
+                                parse(text=expression("if"[1]*":LI")),
+                                parse(text=expression("if"[2]*":HL")),
+                                parse(text=expression("if"[2]*":UL")),
+                                parse(text=expression("if"[2]*":U"^-{}*"L")),
+                                parse(text=expression("if"[2]*":LL")))))
 
 # overall log likelihood of data from posterior predictive
-id_names <- c("if1_hh" = "if1:HI", 
-              "if1_lh" = "if1:HI", 
-              "if1_u-Lh" = "if1:LI", 
-              "if1_uh" = "if1:UI", 
-              "if2_hl" = "if2:UL", 
-              "if2_ll" = "if2:UL", 
-              "if2_u-Ll" = "if2:UL", 
-              "if2_ul" = "if2:UL"
-)
-
 ll_X_obs.mean.all = pp_samples_ll %>% group_by(id) %>% 
   summarize(ev = mean(ll_obs), .groups = "keep")
 p.all <- pp_samples_ll %>% 
   ggplot(aes(x = ll_X_new)) + geom_density() +
-  facet_wrap(~id, scales = "free", ncol = 4, labeller = labeller(id = id_names)) +
+  facet_wrap(~id, scales = "free", ncol = 4, labeller = labeller(id = label_parsed)) +
   geom_point(data = ll_X_obs.mean.all, aes(x=ev, y=0), size=2, color = 'firebrick') +
-  theme_minimal() +
-  theme(legend.position = "top", text = element_text(size = 20)) +
   labs(x = "log likelihood", y = "density")
 p.all
-
 ggsave(paste(target_dir, "pp-log-likelihood-dependent.png", sep = FS), p.all)
 
-# log likelihood seperate for P(b), P(g|b) and P(g|¬b)
+# log likelihood separate for P(b), P(g|b) and P(g|¬b)
 pp_samples_ll.long <- pp_samples_ll %>%
-  pivot_longer(cols = c(-id, -x_blue, -x_if_bg, -x_if_nbg), 
+  pivot_longer(cols = c(-id, -x_blue, -x_if_bg, -x_if_nbg, -trial), 
                names_to = "prob", names_prefix = "ll_", 
                values_to = "ll")
 # ll pp-samples
@@ -265,57 +247,70 @@ df.ll_X = pp_samples_ll.long %>%
   mutate(prob = str_replace(prob, "X_", ""))
 
 # ev ll observed data given params from posterior, seperately for blue/if_bg/if_nbg
-ll_X_obs.mean = pp_samples_ll.long %>% group_by(id, prob) %>% 
+ll_X_obs.mean = pp_samples_ll.long %>% group_by(id, trial, prob) %>% 
   filter(startsWith(prob, "obs_")) %>% 
   summarize(ev = mean(ll), .groups = "drop_last") %>% 
   mutate(prob = str_replace(prob, "obs_", ""))
 
-p.if1 <- df.ll_X  %>% filter(startsWith(id, "if1")) %>% 
+p.if1 <- df.ll_X  %>% filter(startsWith(trial, "if1")) %>% 
   ggplot(aes(x = ll)) + geom_density() +
-  facet_wrap(id~prob, ncol=3, scales = "free") +
-  geom_point(data = ll_X_obs.mean %>% filter(startsWith(id, "if1")), 
+  facet_wrap(id~prob, ncol=3, scales = "free", 
+             labeller = labeller(id = label_parsed, prob = prob_names)) +
+  geom_point(data = ll_X_obs.mean %>% filter(startsWith(trial, "if1")), 
              aes(x=ev, y=0), size=2, color = 'firebrick') +
-  theme_minimal() +
-  theme(legend.position = "top") +
   labs(x = "log likelihood", y = "density")
 p.if1
 
 
-p.if2 <- df.ll_X %>% filter(startsWith(id, "if2")) %>% 
+p.if2 <- df.ll_X %>% filter(startsWith(trial, "if2")) %>% 
   ggplot(aes(x = ll)) + geom_density() +
-  facet_wrap(id~prob, ncol=3, scales = "free") +
-  geom_point(data = ll_X_obs.mean %>% filter(startsWith(id, "if2")), 
+  facet_wrap(id~prob, ncol=3, scales = "free", 
+             labeller = labeller(id = label_parsed, prob = prob_names)) +
+  geom_point(data = ll_X_obs.mean %>% filter(startsWith(trial, "if2")), 
              aes(x=ev, y=0), size=2, color = 'firebrick') +
-  theme_minimal() +
-  theme(legend.position = "top") +
   labs(x = "log likelihood", y = "density")
 p.if2
 
-
+# returns matrix nb.drawn samples x N=nb.participants, 
+# for a single sampled value, given in arg 'col'
+format_sampled_ps <- function(df, col) {
+  df %>% dplyr::select(idx_sample, id_subj, !!col) %>% 
+    group_by(idx_sample) %>% 
+    pivot_wider(names_from="id_subj", values_from=col) %>% 
+    ungroup() %>% dplyr::select(-idx_sample) %>% as.matrix()
+}
 # posterior predictive plots (new sampled data for the 3 probabilities)
-df.pp_x <- pp_samples_ll %>% dplyr::select(x_blue, x_if_bg, x_if_nbg, id) %>% 
-  group_by(id) %>% #, idx_sample) %>% 
-  unnest(cols=c(starts_with("x_"))) %>% 
+df.pp_x <- pp_samples_ll %>% dplyr::select(x_blue, x_if_bg, x_if_nbg, id, trial) %>% 
+  group_by(id) %>% 
   mutate(idx_sample = seq_along(id)) %>% 
-  filter(idx_sample <= 100) %>% 
+  unnest(cols=c(starts_with("x_"))) %>% 
   mutate(x_if_bg = case_when(is.na(x_if_bg) ~ -1, T ~ x_if_bg),
-         x_if_nbg = case_when(is.na(x_if_nbg) ~ -1, T ~ x_if_nbg))
+         x_if_nbg = case_when(is.na(x_if_nbg) ~ -1, T ~ x_if_nbg)) %>% 
+  group_by(id, idx_sample) %>% 
+  mutate(id_subj = row_number())
          
-group_map(df.pp_x %>% group_by(id), function(df, grp){
-  message(grp$id)
-  df.trial <- df.dep %>% filter(id == grp$id) %>% 
+pp_zoib_plots <- group_map(df.pp_x %>% group_by(trial, id), function(df, grp){
+  message(grp$trial)
+  df.trial <- df.dep %>% filter(id == grp$trial) %>% 
     mutate(if_bg = case_when(is.na(if_bg) ~ -1, T ~ if_bg),
            if_nbg = case_when(is.na(if_nbg) ~ -1, T ~ if_nbg)) %>% 
     rowid_to_column("idx_subj")
+  N = nrow(df.trial)
+  y <- df.trial %>% dplyr::select(blue, if_bg, if_nbg) %>%
+    as.matrix() %>% matrix(nrow=1, ncol=N*3) %>% as.numeric()
   
-  map(c("x_blue", "x_if_bg", "x_if_nbg"), function(p){
-    y_rep <- df %>% pull(p) %>% matrix(nrow=100, ncol=nrow(df.trial), byrow = T)
-    p_str <- str_replace(p, "x_", "")
-    y <- df.trial %>% pull(p_str) 
-    p <- ppc_dens_overlay(y=y, yrep=y_rep) + labs(title=paste(grp$id, p_str, sep=": "))
-    ggsave(paste(target_dir, paste("pp_zoib_", grp$id, "_", p_str, ".png", sep=""), sep=FS), p)
-    return(NA)
-  })
+  df.mat <- cbind(format_sampled_ps(df, "x_blue"),
+                  format_sampled_ps(df, "x_if_bg"),
+                  format_sampled_ps(df, "x_if_nbg"))
+  p_grps <- c(rep("P(b)", N), rep("P(g|b)", N), rep("P(g|¬b)", N))
+  p_grps <- factor(p_grps, levels = c("P(b)", "P(g|b)", "P(g|¬b)"))
+  
+  
+  p <- ppc_dens_overlay_grouped(y = y, yrep = df.mat[1:100,], group=p_grps) + 
+    labs(title=trial_names[[grp$trial]])
+  
+  ggsave(paste(target_dir, paste("pp_zoib_", grp$trial, ".png", sep=""), sep=FS), p)
+  return(p)
 })
 
 

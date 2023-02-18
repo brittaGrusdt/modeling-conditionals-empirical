@@ -20,9 +20,10 @@ library(latex2exp)
 library(boot)
 
 source(here("R", "helpers-dirichlet-regression.R"))
+source(here("R", "helpers-data-models.R"))
 # Setup -------------------------------------------------------------------
-dep_r_names <- c("if1" = "IF[1]", "if2" = "IF[2]")
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
+
 # Data --------------------------------------------------------------------
 active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
@@ -211,27 +212,40 @@ posterior_samples.probs %>%
 
 # Posterior predictive checks ---------------------------------------------
 pp_samples <- posterior_predict(model_dep.pe_task)
+pp_plots <- map(df.brms %>% filter(relation!="independent") %>% pull(id) %>% unique(), 
+                function(trial_id){
+  df.trial <- df.brms %>% filter(id == trial_id)
+  tit_pblue <- switch(trial_id,
+                "if1_hh" = c(expression("if"[1]*":HI"), "high"),
+                "if1_uh" = c(expression(paste(`if`[1], ":UI")),"unc"),
+                "if1_u-Lh" = c(expression("if"[1]*":U"^-{}*"I"), "uncl"),
+                "if1_lh" = c(expression("if"[1]*":LI"), "low"),
+                "if2_hl" = c(expression("if"[2]*":HL"), "high"),
+                "if2_ul" = c(expression("if"[2]*":UL"), "unc"),
+                "if2_u-Ll" = c(expression("if"[2]*":U"^-{}*"L"), "uncl"),
+                "if2_ll" = c(expression("if"[2]*":LL"), "low"))
+  indices1 <- df_dep.brms$pblue == eval(tit_pblue[2])
+  indices2 <- df_dep.brms$relation == substr(trial_id, 1, 3)
+  N = nrow(df.trial)
+  y = df_dep.brms$y[indices1 & indices2, ]
+  y_vec <- matrix(y, ncol = N*4, byrow=T) %>% as.numeric()
+  grp <- factor(c(rep("bg", N), rep("b¬g", N), rep("¬bg", N), rep("¬b¬g", N)), 
+                levels = c("bg", "b¬g", "¬bg", "¬b¬g"), 
+                labels = c("bg", "b¬g", "¬bg", "¬b¬g"))
+  
+  yrep = pp_samples[1:100, indices1 & indices2, ]
+  yrep_2d <- matrix(yrep, nrow=100, ncol=N*4)
 
-pp_plots <- map(c("bg", "b", "g", "none"), function(cat){
-  map(c("high", "unc", "uncl", "low"), function(pblue){
-    indices <- df_dep.brms$pblue == pblue
-    tit <- switch(cat, "bg" = "bg", "b" = "b¬g", "g" = "¬bg", "none" = "¬b¬g")
-    xlab <- switch(pblue, "high"="H", "unc"="U", 
-                   "uncl"=unname(TeX(c("$U^-$"))), "low"="L")
+  p <- ppc_dens_overlay_grouped(y=y_vec, yrep = yrep_2d, group = grp) +
+    labs(title = parse(text=tit_pblue[1])) +
+    theme(legend.position = "none")
     
-    p <- ppc_dens_overlay_grouped(
-      y=df_dep.brms$y[indices, cat], 
-      yrep = pp_samples[1:100, indices, cat], 
-      group = df_dep.brms$relation[indices]
-    ) +
-      labs(x = parse(text=paste("prior_blue:", xlab)), title = tit) +
-      theme(legend.position = "none")
-    ggsave(paste(target_dir, FS, "pp_", cat, "_pblue_", pblue, 
-                 ".png", sep=""), plot = p, width = 5, height=3)
-    return(p)
-  })
+  
+  fn <- paste(target_dir, FS, paste("pp-tables-evs-posterior-", trial_id, 
+                                    ".png", sep=""), sep="")
+  ggsave(fn, plot = p)
+  return(p)
 })
-
 
 # bootstrapped data
 get_mean_estimates = function(data, i){
