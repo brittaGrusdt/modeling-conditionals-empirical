@@ -18,11 +18,17 @@ library(emmeans)
 library(brms)
 library(latex2exp)
 library(boot)
+library(stringr)
 
 source(here("R", "helpers-dirichlet-regression.R"))
 # Setup -------------------------------------------------------------------
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
-
+prob_names <- c("blue"="P(b)", "green" = "P(g)")
+trial_names <- c("independent_hh" = "ind:HH", 
+                 "independent_ll" = "ind:LL", 
+                 "independent_uh" = "ind:UH", 
+                 "independent_ul" = "ind:UL", 
+                 "independent_hl" = "ind:HL")
 # Data --------------------------------------------------------------------
 active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
@@ -201,38 +207,49 @@ posterior_samples.probs %>%
 
 
 cat <- "green"
-  posterior_samples.probs %>% 
-    dplyr::select(rowid, prior_blue_green, !!cat) %>% 
-    group_by(rowid, prior_blue_green) %>% 
-    pivot_wider(names_from = "prior_blue_green", values_from = !!cat) %>% 
-    ungroup() %>% 
-    summarize(ll_ul = mean(ll < ul), 
-              ll_hl = mean(ll < hl),
-              ul_hl = mean(ul < hl)) %>% 
-    add_column(response = !!cat)
+posterior_samples.probs %>% 
+  dplyr::select(rowid, prior_blue_green, !!cat) %>% 
+  group_by(rowid, prior_blue_green) %>% 
+  pivot_wider(names_from = "prior_blue_green", values_from = !!cat) %>% 
+  ungroup() %>% 
+  summarize(ll_ul = mean(ll < ul), 
+            ll_hl = mean(ll < hl),
+            ul_hl = mean(ul < hl)) %>% 
+  add_column(response = !!cat)
   
 
 
 # Posterior predictive checks ---------------------------------------------
 pp_samples <- posterior_predict(model_ind.pe_task)
   
-pp_plots <- map(c("bg", "b", "g", "none"), function(cat){
-  map(c("high", "unc", "low"), function(pblue){
-    indices <- df_ind.brms$pblue == pblue
-    tit <- switch(cat, "bg" = "bg", "b" = "b¬g", "g" = "¬bg", "none" = "¬b¬g")
-    xlab <- switch(pblue, "high"="H", "unc"="U", "low"="L")
-    p <- ppc_dens_overlay_grouped(
-      y=df_ind.brms$y[indices, cat], 
-      yrep = pp_samples[1:100, indices, cat], 
-      group = df_ind.brms$pgreen[indices]
-      ) +
-      labs(x = paste("prior_blue:", xlab), title = tit) +
-      theme(legend.position = "none")
-    ggsave(paste(target_dir, FS, "pp_", cat, "_pblue_", pblue, 
-                 ".png", sep=""), plot = p, width = 5, height=3)
-    return(p)
-  })
-})
+names_priors = c("H"="high", "L"="low", "U"="unc")
+fn_pp_plots = function(trial_id){
+  df.trial <- df.brms %>% filter(id == trial_id)
+  N = nrow(df.trial)
+  pb = names_priors[[str_sub(trial_names[[trial_id]], -2, -2)]]
+  pg = names_priors[[str_sub(trial_names[[trial_id]], -1, -1)]]
+  indices_b <- df_ind.brms$pblue == pb
+  indices_g <- df_ind.brms$pgreen == pg
+    
+  y = df_ind.brms$y[indices_b & indices_g, ]
+  y_vec <- matrix(y, ncol = N*4, byrow=T) %>% as.numeric()
+  grp <- factor(c(rep("bg", N), rep("b¬g", N), rep("¬bg", N), rep("¬b¬g", N)), 
+                levels = c("bg", "b¬g", "¬bg", "¬b¬g"), 
+                labels = c("bg", "b¬g", "¬bg", "¬b¬g"))
+  
+  yrep = pp_samples[1:100, indices_b & indices_g, ]
+  yrep_2d <- matrix(yrep, nrow=100, ncol=N*4)
+  
+  p <- ppc_dens_overlay_grouped(y=y_vec, yrep = yrep_2d, group = grp) +
+    labs(title = trial_names[[trial_id]])
+  
+  fn <- paste("pp-tables-evs-posterior-", trial_id, ".png", sep="")
+  target_path <- paste(target_dir, FS, fn, sep="")
+  ggsave(target_path, plot = p)
+  return(p)
+}
+pp_plots <- map(df.brms %>% filter(relation=="independent") %>% pull(id) %>%
+                  unique(), fn_pp_plots)
 
 
 # bootstrapped data
@@ -255,7 +272,8 @@ data_bootstrapped = group_map(
     colnames(cis) <- c("lower", "upper")
     cis %>% as_tibble(rownames=NA) %>% rownames_to_column("world") %>% 
       add_column(pblue = grp$pblue, pgreen=grp$pgreen)
-  }) %>% bind_rows() %>%  add_column(data = "empiric") %>% 
+  }
+) %>% bind_rows() %>%  add_column(data = "empiric") %>% 
   mutate(world = factor(world, levels = c("bg", "b", "g", "none"),
                         labels = c("bg", "b¬g", "¬bg", "¬b¬g")))
 
@@ -307,16 +325,4 @@ pp_plots_means <- map(c("high", "low"), function(pgreen){
     }
   })
 })
-
-
-
-
-
-
-
-
-
-
-
-
 

@@ -11,15 +11,26 @@ library(bayesplot)
 library(xtable)
 library(ggpubr)
 library(tidyselect)
+library(ggthemes)
 
-source(here("R", "fit-data-helper-functions.R"))
+source(here("R", "helpers-data-models.R"))
+
+# for plots
+theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
+prob_names <- c("blue"="P(b)", "green" = "P(g)")
+trial_names <- c("independent_hh" = "ind:HH", 
+                 "independent_ll" = "ind:LL", 
+                 "independent_uh" = "ind:UH", 
+                 "independent_ul" = "ind:UL", 
+                 "independent_hl" = "ind:HL")
 
 # Data --------------------------------------------------------------------
 active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 
-target_dir = paste(here(params$dir_results), "independent-contexts", sep=FS)
+target_dir = paste(here(params$dir_results), "independent-contexts", 
+                   "zoib-model", sep=FS)
 if(!dir.exists(target_dir)) dir.create(target_dir, recursive = T)
 data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
   dplyr::select(prolific_id, id, utt.standardized, uc_task, 
@@ -109,7 +120,6 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
     program_file = here("webppl-model", "posterior-independent-data.wppl"),
     data_var = "data",
     model_var = "non_normalized_posterior",
-    random_seed = params$seed_webppl,
     data = data_webppl,
     packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
     inference_opts = list(method = "MCMC",
@@ -125,10 +135,33 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
   
   return(samples.posterior)
 })
+save_data(posterior_samples.ind, paste(target_dir, "posterior_samples.rds", sep=FS))
+
+# Chain Plots
+df <- posterior_samples.ind %>% 
+  mutate(Chain = as.factor(Chain)) %>% 
+  pivot_longer(cols=c(-Iteration, -Chain, -id), names_to = "param")
+plots_chains = map(c("alpha", "gamma", "shape1", "shape2"), function(par){
+  plots = map(c("blue", "green", "delta"), function(p) {
+    fn <- paste(par, p, sep="_")
+    p <- df %>% 
+      filter(startsWith(param, fn)) %>% 
+      ggplot(aes(x=Iteration, y = value, color=Chain, group = Chain)) + 
+      geom_line() + 
+      facet_wrap(id~param, scales="free", 
+                 labeller = labeller(id = trial_names))
+    
+    ggsave(paste(target_dir, FS, paste("chains_", fn, ".png", sep = ""), sep=""), p)
+    
+    return(p)                 
+  })
+  return(plots)
+})
+
+# Mean posterior values for likelihood function
 pars <- c("alpha_blue", "gamma_blue", "shape1_blue", "shape2_blue", 
           "alpha_green", "gamma_green", "shape1_green", "shape2_green",
           "alpha_delta", "gamma_delta", "shape1_delta", "shape2_delta", "theta_p")
-#"ratio_range_variance_bg")
 evs.posterior.ind = posterior_samples.ind %>% 
   pivot_longer(cols = all_of(pars), names_to = "Parameter", values_to = "value") %>% 
   group_by(id, Parameter) %>%
@@ -143,65 +176,43 @@ evs.posterior.ind = posterior_samples.ind %>%
 save_data(evs.posterior.ind, 
           paste(target_dir, "evs-posterior-independent-data.rds", sep=FS))
 
+
 # Generate new independent tables -----------------------------------------
-# generate set of independent tables with expected values of posterior distributions
+# generate set of dependent tables for each sample from posterior distribution (parameters)
 sampled_tables = map_dfr(ind_trials, function(trial_id){
   message(trial_id)
-  data_webppl <- list(probs = df.behav %>% filter(id == trial_id),
-                      evs_params = evs.posterior.ind %>% filter(id == trial_id))
-  samples.ind_tables <- webppl(
-    program_file = here("webppl-model", "posterior-independent-data.wppl"),
-    random_seed = params$seed_webppl,
-    data_var = "data",
-    model_var = "sample_table",
-    data = data_webppl,
-    packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
-    inference_opts = list(method = "forward", samples = 1000)
-  ) %>% as_tibble() %>% 
-    pivot_wider(names_from = "Parameter", values_from = "value") %>% 
-    add_column(id = trial_id)
+  samples_trial <- posterior_samples.ind %>% filter(id == trial_id) %>% 
+    filter(Iteration <= 100) #just use the first 100 samples, not all
+  #samples_trial <- evs.posterior.ind %>% filter(id == trial_id) #use evs
+  data_trial <- df.behav %>% filter(id == trial_id)
+  map(seq(1, nrow(samples_trial)), function(idx){
+    posterior_params <- samples_trial[idx,]
+    data_webppl <- list(probs = data_trial, evs_params = posterior_params)
+    
+    samples.ind_tables <- webppl(
+      program_file = here("webppl-model", "posterior-independent-data.wppl"),
+      random_seed = params$seed_webppl, #?
+      data_var = "data",
+      model_var = "sample_table",
+      data = data_webppl,
+      packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
+      inference_opts = list(method = "forward", samples = nrow(data_trial))
+    ) %>% as_tibble() %>% 
+      pivot_wider(names_from = "Parameter", values_from = "value") %>% 
+      add_column(id = trial_id)
+  })
 })
+save_data(sampled_tables, 
+          paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
 
 # plot new tables sampled for each independent context with observed data
-df.samples <- sampled_tables %>% 
-  pivot_longer(cols = c(AC, `A-C`, `-AC`, `-A-C`), 
-               names_to = "cell", values_to = "value")
-
-df.behav.long = df.behav %>% 
-  dplyr::select(AC, `A-C`, `-AC`, `-A-C`, prolific_id, id) %>% 
-  pivot_longer(cols = c(AC, `A-C`, `-AC`, `-A-C`), 
-               names_to = "cell", values_to = "value") 
-
-colors <- c("empirical" = "darkgreen", "sampled" = "firebrick")
-plots_new_tables <- map(ind_trials, function(trial_id){
-  
-  trial.behav <- df.behav.long %>% filter(id == trial_id) %>% 
-    dplyr::select(id, cell, value) %>% add_column(data = "empirical")
-  trial.samples <- df.samples %>% filter(id == trial_id) %>% 
-    dplyr::select(id, cell, value) %>% add_column(data = "sampled")
-  df.trial <- bind_rows(trial.behav, trial.samples)
-  
-  evs.behav <- trial.behav %>% group_by(id, cell) %>% 
-    summarize(value = mean(value), .groups = "drop_last") %>% 
-    add_column(data = "empirical")
-  evs.samples <- trial.samples %>% group_by(id, cell) %>% 
-    summarize(value = mean(value), .groups = "drop_last") %>% 
-    add_column(data = "sampled")
-  df.evs <- bind_rows(evs.behav, evs.samples)
-  
-  p <-  df.trial %>% 
-    ggplot(aes(x=value)) + geom_density(aes(color = data)) + 
-    geom_point(data = df.evs, aes(y = 0, color = data), size = 2) +
-    facet_wrap(~fct_rev(cell), ncol=2, scales = "free") +
-    labs(title = trial_id) +
-    scale_color_manual(name = "data", values = colors) + 
-    theme_minimal() +
-    theme(legend.position = "top")
-  return(p)
+pp_plots_new_tables <- map(ind_trials, function(trial_id){
+  df.trial <- df.ind %>% filter(id == trial_id)
+  tit <- trial_names[[trial_id]]
+  fn <- paste(target_dir, FS, paste("pp-tables-evs-posterior-", trial_id, 
+                                    ".png", sep=""), sep="")
+  p <- plot_new_tables(df.trial, sampled_tables, tit, fn)
 })
-
-plots_new_tables
-
 
 # Posterior predictive ----------------------------------------------------
 # Log likelihood plots
@@ -217,14 +228,19 @@ likelihood_fn = function(df.samples, df.grp){
     packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS))
   ) 
   
-  result = tibble(ll_X_new = samples.pp$ll_X, 
-                  ll_obs = samples.pp$ll_obs, 
-                  ll_X_blue = samples.pp$ll_x_blue, 
-                  ll_X_green = samples.pp$ll_x_green, 
-                  ll_X_bg = samples.pp$ll_x_bg, 
-                  ll_obs_blue = samples.pp$ll_obs_blue, 
-                  ll_obs_green = samples.pp$ll_obs_green, 
-                  ll_obs_bg = samples.pp$ll_obs_bg)
+  result = tibble(
+    x_blue = samples.pp$x_blue,
+    x_green = samples.pp$x_green,
+    x_bg = samples.pp$x_bg,
+    ll_X_new = samples.pp$ll_X, 
+    ll_obs = samples.pp$ll_obs, 
+    ll_X_blue = samples.pp$ll_x_blue, 
+    ll_X_green = samples.pp$ll_x_green, 
+    ll_X_bg = samples.pp$ll_x_bg, 
+    ll_obs_blue = samples.pp$ll_obs_blue, 
+    ll_obs_green = samples.pp$ll_obs_green, 
+    ll_obs_bg = samples.pp$ll_obs_bg
+  )
   return(result %>% add_column(id = df.grp$id))
 }
 pp_samples_ll = group_map(posterior_samples.ind %>% group_by(id),
@@ -233,26 +249,19 @@ pp_samples_ll = group_map(posterior_samples.ind %>% group_by(id),
 # overall log likelihood of data from posterior predictive
 ll_X_obs.mean = pp_samples_ll %>% group_by(id) %>% 
   summarize(ev = mean(ll_obs), .groups = "keep")
-id_names <- c("independent_hh" = "ind:HH", 
-              "independent_hl" = "ind:HL", 
-              "independent_ll" = "ind:LL", 
-              "independent_uh" = "ind:UH", 
-              "independent_ul" = "ind:UL"
-              )
+
 p <- pp_samples_ll %>% 
   ggplot(aes(x = ll_X_new)) + geom_density() +
-  facet_wrap(~id, scales = "free", labeller = labeller(id = id_names)) +
+  facet_wrap(~id, scales = "free", labeller = labeller(id = trial_names)) +
   geom_point(data = ll_X_obs.mean, aes(x=ev, y=0), size=2, color = 'firebrick') +
-  theme_minimal() +
-  theme(legend.position = "top", text = element_text(size = 20)) +
   labs(x = "log likelihood", y = "density")
 p
 ggsave(paste(target_dir, "pp-log-likelihood-independent.png", sep = FS), p)
 
 # log likelihood seperate for P(b), P(g) and P(b,g)
 pp_samples_ll.long <- pp_samples_ll %>%
-  pivot_longer(cols = c(-id), names_to = "prob", names_prefix = "ll_", 
-               values_to = "ll")
+  pivot_longer(cols = c(-id,-x_blue, -x_green, -x_bg), 
+               names_to = "prob", names_prefix = "ll_", values_to = "ll")
 # ll pp-samples
 df.ll_X = pp_samples_ll.long %>% 
   filter(startsWith(prob, "X_") & prob != "X_new") %>% 
@@ -266,9 +275,10 @@ ll_X_obs.mean = pp_samples_ll.long %>% group_by(id, prob) %>%
 
 p <- df.ll_X %>% 
   ggplot(aes(x = ll)) + geom_density() +
-  facet_wrap(prob~id, ncol=5, scales = "free") +
+  facet_wrap(prob~id, ncol=5, scales = "free", 
+             labeller = labeller(id = trial_names)) +
   geom_point(data = ll_X_obs.mean, aes(x=ev, y=0), size=2, color = 'firebrick') +
-  theme_minimal() +
-  theme(legend.position = "top") +
   labs(x = "log likelihood", y = "density")
 p
+ggsave(paste(target_dir, "pp-log-likelihood-independent-separate.png", sep = FS), p)
+
