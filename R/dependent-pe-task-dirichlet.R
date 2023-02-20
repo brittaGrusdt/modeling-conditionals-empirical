@@ -182,7 +182,8 @@ posterior_if_nbg =  plot_posterior_prob(posterior_samples.probs %>%
                                         "if_nbg", "P(g|¬b)")
   ggsave(paste(target_dir, "posterior_if_nbg.png", sep=FS), plot = posterior_if_nbg)
 
-# posterior probabilities hypotheses
+
+# Hypotheses --------------------------------------------------------------
 # P(bg) estimated given prior blue: high>unc>uncl>low
 posterior_samples.probs %>% 
   dplyr::select(rowid, relation, prior_blue, "bg") %>% 
@@ -208,6 +209,17 @@ posterior_samples.probs %>%
             unc_low = mean(unc < low),
             uncl_low = mean(uncl < low)) %>% 
   add_column(response = "none")
+
+
+# P(g|¬b)
+posterior_samples.probs %>% 
+  mutate(if_nbg = g/(g+none)) %>% 
+  dplyr::select(rowid, relation, prior_blue, if_nbg) %>% 
+  pivot_wider(values_from = if_nbg, names_from =relation) %>% 
+  mutate(if2_larger = if2 > if1) %>% 
+  group_by(prior_blue) %>% 
+  summarize(p_h = sum(if2_larger)/n(), .groups = "drop_last")
+  
 
 
 # Posterior predictive checks ---------------------------------------------

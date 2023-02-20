@@ -11,7 +11,6 @@ library(bayesplot)
 library(xtable)
 library(ggpubr)
 library(tidyselect)
-library(bayesplot)
 library(ggthemes)
 library(tidybayes)
 library(emmeans)
@@ -84,11 +83,11 @@ posterior_samples.dep = map_dfr(dep_trials, function(trial_id){
     model_var = "non_normalized_posterior",
     data = data_webppl,
     packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
-    inference_opts = list(method = "MCMC",
-                          samples = 1000,
-                          lag = 2,
-                          burn = 10000,
-                          verbose = T),
+    inference_opts = list(method = "incrementalMH",
+                          samples = 3000,
+                          lag = 5,
+                          burn = 70000,
+                          verbose = F),
     chains = 4, 
     cores = 4) %>%
     as_tibble() %>% 
@@ -100,41 +99,56 @@ posterior_samples.dep = map_dfr(dep_trials, function(trial_id){
 save_data(posterior_samples.dep, paste(target_dir, "posterior_samples.rds", sep=FS))
 
 # Chain Plots
-df <- posterior_samples.dep %>% 
+posterior_samples.long <- posterior_samples.dep %>% 
   mutate(Chain = as.factor(Chain)) %>% 
   pivot_longer(cols=c(-Iteration, -Chain, -id), names_to = "param")
 
 plots_chains = map(c("alpha", "gamma", "shape1", "shape2"), function(par){
   plots = map(c("blue", "if_bg", "if_nbg"), function(p) {
     fn <- paste(par, p, sep="_")
-    p <- df %>% 
+    p <- posterior_samples.long %>% 
       filter(startsWith(param, fn)) %>% 
       ggplot(aes(x=Iteration, y = value, color=Chain, group = Chain)) + 
       geom_line() + facet_wrap(id~param, scales="free")
-    
     ggsave(paste(target_dir, FS, paste("chains_", fn, ".png", sep = ""), sep=""), p)
-    
+    p2 <- posterior_samples.long %>% 
+      filter(startsWith(param, fn)) %>% 
+      ggplot(aes(x=value, color=Chain, group = Chain)) + 
+      geom_density() + 
+      facet_wrap(id~param, scales="free", 
+                 labeller = labeller(id = trial_names))
+    ggsave(paste(target_dir, FS, 
+                 paste("chains_marginal_", fn, ".png", sep = ""), sep=""), p2)
     return(p)                 
   })
   return(plots)
 })
+# compute rhats 
+df.diagnostics =
+  map(dep_trials, function(trial_id){
+    map(c("alpha", "gamma", "shape1", "shape2"), function(par){
+      vals = map(c("blue", "if_bg", "if_nbg"), function(p) {
+        fn <- paste(par, p, sep="_")
+        samples <- posterior_samples.long %>%
+          filter(param == !!fn & id == !!trial_id)
+        
+        mat <- samples %>% dplyr::select(Iteration, Chain, value) %>% 
+          rename(`.iteration`=Iteration, `.chain` = Chain) %>% 
+          posterior::as_draws_matrix()
+        df.summary = posterior::summarise_draws(mat) %>% mutate(variable = fn)
+        return(df.summary %>% add_column(id = trial_id))
+      })
+  }) %>% bind_rows()
+}) %>% bind_rows()
+df.diagnostics %>% filter(rhat > 1.1)
+save_data(df.diagnostics, paste(target_dir, "mean-posteriors-and-diagnostics.rds", sep=FS))
 
-pars <- c("alpha_blue", "gamma_blue", "shape1_blue", "shape2_blue", 
-          "alpha_if_nbg", "gamma_if_nbg", "shape1_if_nbg", "shape2_if_nbg",
-          "alpha_if_bg", "gamma_if_bg", "shape1_if_bg", "shape2_if_bg")
-evs.posterior.dep = posterior_samples.dep %>% 
-  pivot_longer(cols = all_of(pars), names_to = "Parameter", values_to = "value") %>% 
-  group_by(id, Parameter) %>%
-  summarize(ev = mean(value), .groups = "drop_last") %>% 
-  pivot_wider(names_from = "Parameter", values_from = "ev") %>% 
-  # (order in thesis)
-  dplyr::select(id,
-                alpha_if_bg, gamma_if_bg, shape1_if_bg, shape2_if_bg,
-                alpha_if_nbg, gamma_if_nbg, shape1_if_nbg, shape2_if_nbg,
-                alpha_blue, gamma_blue, shape1_blue, shape2_blue)
-
-save_data(evs.posterior.dep, 
-          paste(target_dir, "evs-posterior-dependent-data.rds", sep=FS))
+# mean posterior values
+posterior_means <- df.diagnostics %>% dplyr::select(variable, mean, id) %>% 
+  group_by(id) %>% mutate(variable = str_replace(variable, "if_", "if")) %>% 
+  separate(variable, into=c("par", "prob"), sep="_") %>% 
+  arrange(prob)
+posterior_means %>% filter(id == "if1_uh") 
 
 # Generate new dependent tables -------------------------------------------
 # get Posterior predictive data

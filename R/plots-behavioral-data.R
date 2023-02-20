@@ -291,6 +291,12 @@ df.means_pe_utts.by_rel = pe_uc_data %>%
   summarize(mean_pe = mean(pe_selected_utt), .groups = "drop_last") %>% 
   arrange(desc(mean_pe)) %>% 
   mutate(relation = factor(relation, levels = c("if1", "if2", "independent")))
+# conjunctions
+df.means_pe_utts.by_rel %>% filter(utt_type == "conjunction") %>% arrange(mean_pe)
+# overall mean / median by relation
+df.means_pe_utts.by_rel %>% filter(utt_type == "conjunction") %>% 
+  group_by(utt.standardized) %>% 
+  summarize(mean=mean(mean_pe), median = median(mean_pe))
 
 # selections of utterances
 df.means_pe_utts.by_rel %>% filter(utt.standardized == "if blue falls green falls")

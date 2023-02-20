@@ -13,14 +13,8 @@ var sample_table = function(){
     shape1: params.shape1_green, shape2: params.shape2_green
   }
   var pars_bg = {
-    alpha: params.alpha_delta, gamma: params.gamma_delta,
-    shape1: params.shape1_delta, shape2: params.shape2_delta,
-    theta: params.theta_p
+    sd: params.sd_delta
   }
-  // variance cannot take on arbitrary values, usually must be < mu * (1-mu)
-  //var pars_bg = {ratio: params.ratio_range_variance_bg}
-  //var pars_bg = {shape1: params.shape1_bg, shape2: params.shape2_bg}
-
   var table = sample_independent_table(pars_blue, pars_green, pars_bg)
   return(table)
 }
@@ -31,10 +25,9 @@ var non_normalized_posterior = function(){
   // draws from prior
   var pars_blue = sample_zoib_prior()
   var pars_green = sample_zoib_prior()
-  var pars_bg = Object.assign({theta: sample(Uniform({a: 0, b: 1}))},
-                              sample_zoib_prior())//sample_prior_bg()
+  var pars_bg = sample_prior_bg()
 
-  var ll = map(function(obs){
+  var ll = mapIndexed(function(i, obs){
     // log likelihood P(blue) and P(green)
     var ll_blue = get_zoib_likelihood(obs.blue, pars_blue)
     var ll_green = get_zoib_likelihood(obs.green, pars_green)
@@ -43,34 +36,6 @@ var non_normalized_posterior = function(){
     // log likelihood P(b, g)
     var ll_bg = get_likelihood_bg(obs, pars_bg)
     //display("val: " + val + " ll_bg: " + ll_bg)
-    //if(ll_bg == -Infinity) display("max_diff: " + max_diff + " obs_diff: " + obs_diff + " obs_ratio: " + obs_ratio)
-
-    // // avoid overflow
-    // var min_is_max = (Math.round(range_bg.min * 100, 2) / 100) == (Math.round(range_bg.max * 100, 2) / 100)
-    // var obs_is_min = (Math.round(obs.AC * 100, 2) / 100) == (Math.round(range_bg.min * 100, 2) / 100)
-    // var obs_is_max = (Math.round(obs.AC * 100, 2) / 100) == (Math.round(range_bg.max * 100, 2) / 100)
-    //
-    // var Beta_likelihood_bg = !min_is_max ?
-    //   get_likelihood_fn_independent_bg(range_bg, mu, pars_bg.ratio) :
-    //   undefined;
-    //
-    // // the variance cannot take on arbitrary values! must be < mu * (1-mu) for interval (0, 1)
-    // // if not it may take on negative values
-    // // when shape params of beta distribution are negative, return -Inf
-    // // the beta distribution is not defined when min_is_max
-    // if(!min_is_max && any(function(x){x <= 0}, Object.values(Beta_likelihood_bg.params))){
-    //   return(-Infinity)
-    // }
-    //
-    // var x_val = !min_is_max  & !obs_is_max & !obs_is_min ?
-    //   transform_beta_ac_to_beta_01(obs.AC, range_bg.min, range_bg.max) : undefined;
-    // //display("min: " + range_bg.min + " max: " + range_bg.max + " obs.AC: " + obs.AC + " x_val: " + x_val)
-    // var ll_bg = x_val != undefined ? Beta_likelihood_bg.score(x_val) : 0;
-    //if(!min_is_max) display(" mean: " + mu + " obs.AC: " + obs.AC + " ll_bg: " + ll_bg)
-    // if(ll_bg == 0 || ll_bg == -Infinity){
-    //   display(" mode: " + mode + " min: " + min_ac + " max: " + max_ac + " obs.AC: " + obs.AC)
-    //   display("AC: " + obs.AC + " blue: " + obs.blue + " green: " + obs.green)
-    // }
     // display("ll_bg: " + ll_bg + " ll_blue: " + ll_blue + " ll_green: " + ll_green)
     var ll = ll_bg + ll_blue + ll_green
     return(ll)
@@ -79,14 +44,13 @@ var non_normalized_posterior = function(){
  //display("sum(ll): " + sum(ll))
  factor(sum(ll))
 
- return({shape1_blue: pars_blue.shape1, shape2_blue: pars_blue.shape2,
-         gamma_blue: pars_blue.gamma, alpha_blue: pars_blue.alpha,
+ return({
+   shape1_blue: pars_blue.shape1, shape2_blue: pars_blue.shape2,
+   gamma_blue: pars_blue.gamma, alpha_blue: pars_blue.alpha,
 
-         shape1_green: pars_green.shape1, shape2_green: pars_green.shape2,
-         gamma_green: pars_green.gamma, alpha_green: pars_green.alpha,
+   shape1_green: pars_green.shape1, shape2_green: pars_green.shape2,
+   gamma_green: pars_green.gamma, alpha_green: pars_green.alpha,
 
-         alpha_delta: pars_bg.alpha, gamma_delta: pars_bg.gamma,
-         shape1_delta: pars_bg.shape1, shape2_delta: pars_bg.shape2,
-         theta_p: pars_bg.theta
-       })
+   sd_delta: pars_bg.sd
+  })
 }
