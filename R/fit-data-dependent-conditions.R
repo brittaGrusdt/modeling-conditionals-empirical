@@ -153,50 +153,35 @@ posterior_means %>% filter(id == "if1_uh")
 # Generate new dependent tables -------------------------------------------
 # get Posterior predictive data
 # generate set of dependent tables for each sample from posterior distribution (parameters)
-sampled_tables = map_dfr(dep_trials, function(trial_id){
-  message(trial_id)
-  samples_trial <- posterior_samples.dep %>% filter(id == trial_id) %>% 
-    filter(Iteration <= 100) #just use the first 100 samples, not all
-  #samples_trial <- evs.posterior.dep %>% filter(id == trial_id) #use evs
-  data_trial <- df.dep %>% filter(id == trial_id)
-  
-  map(seq(1, nrow(samples_trial)), function(idx){
-    
-    posterior_params <- samples_trial[idx,]
-    data_webppl <- list(probs = data_trial,
-                        evs_params = posterior_params)
 
-    samples.dep_tables <- webppl(
-      program_file = here("webppl-model", "posterior-dependent-data.wppl"),
-      data_var = "data",
-      model_var = "sample_table",
-      data = data_webppl,
-      packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
-      inference_opts = list(method = "forward", samples = nrow(data_trial))
-    ) %>% as_tibble() %>% 
-      pivot_wider(names_from = "Parameter", values_from = "value") %>% 
-      add_column(id = trial_id)
-  })
-})
+# tables sampled for each draw from posterior
+sampled_tables <- sample_tables(
+  df.dep, dep_trials, posterior_samples.dep %>% filter(Iteration <= 100),
+  here("webppl-model", "posterior-dependent-data.wppl")
+)
 save_data(sampled_tables, 
           paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
 
-pp_plots_new_tables <- map(dep_trials, function(trial_id){
-  df.trial <- df.dep %>% filter(id == trial_id)
-    tit <- switch(trial_id,
-                  "if1_hh"=expression("if"[1]*":HI"),
-                  "if1_uh"=expression(paste(`if`[1], ":UI")),
-                  "if1_u-Lh"=expression("if"[1]*":U"^-{}*"I"),
-                  "if1_lh"=expression("if"[1]*":LI"),
-                  "if2_hl"=expression("if"[2]*":HL"),
-                  "if2_ul"=expression("if"[2]*":UL"),
-                  "if2_u-Ll"=expression("if"[2]*":U"^-{}*"L"),
-                  "if2_ll"=expression("if"[2]*":LL"))
-  fn <- paste(target_dir, FS, paste("pp-tables-evs-posterior-", trial_id, 
-                                    ".png", sep=""), sep="")
-  p <- plot_new_tables(df.trial, sampled_tables, tit, fn)
-  return(p)
-})
+# Sample tables with mean posterior values --------------------------------
+# tables sampled with mean posterior values, N_rep x N draws
+# use N_rep = 20 repetitions
+sampled_tables.evs <- sample_tables(
+  df.dep, dep_trials, 
+  posterior_means %>% 
+    mutate(prob = str_replace(prob, "if", "if_")) %>%
+    unite("name", par, prob, sep="_") %>%
+    pivot_wider(names_from = "name", values_from = "mean"),
+  here("webppl-model", "posterior-dependent-data.wppl"), 
+  repetitions = 20
+)
+save_data(sampled_tables.evs, paste(target_dir, "sampled-tables-evs.rds", sep=FS))
+
+pp_plots = make_pp_plots_new_dependent_tables(
+  df.dep, sampled_tables.evs, dep_trials, target_dir, "pp-tables-evs"
+)
+pp_plots = make_pp_plots_new_dependent_tables(
+  df.dep, sampled_tables, dep_trials,target_dir, "pp-tables"
+)
 
 # Posterior predictive ----------------------------------------------------
 # Log likelihood plots
@@ -238,6 +223,7 @@ pp_samples_ll = group_map(posterior_samples.dep %>% group_by(id), ll_fn) %>%
                                 parse(text=expression("if"[2]*":UL")),
                                 parse(text=expression("if"[2]*":U"^-{}*"L")),
                                 parse(text=expression("if"[2]*":LL")))))
+save_data(pp_samples_ll, paste(target_dir, "pp_samples_ll.rds",sep = FS))
 
 # overall log likelihood of data from posterior predictive
 ll_X_obs.mean.all = pp_samples_ll %>% group_by(id) %>% 
@@ -327,4 +313,34 @@ pp_zoib_plots <- group_map(df.pp_x %>% group_by(trial, id), function(df, grp){
   return(p)
 })
 
+# separate plot for each world
+# pp_plots_new_tables <- map(dep_trials, function(trial_id){
+#   df.trial <- df.dep %>% filter(id == trial_id)
+#   N = nrow(df.trial)
+#   df.samples <- sampled_tables %>% filter(id == trial_id)
+#   tit <- trial_names[[trial_id]]
+#   
+#   plots = map(c("AC", "A-C", "-AC", "-A-C"), function(world){
+#     y <- df.trial[[world]]
+#     yrep <- df.samples %>%
+#       dplyr::select(all_of(c(world))) %>% as.matrix() %>% 
+#       matrix(nrow=nrow(df.samples)/N, ncol=nrow(df.trial), byrow=T)
+#     lab_x = switch(world, "AC"="bg", "A-C"="b¬g", "-AC"="¬bg", "-A-C"="¬b¬g")
+#     tit <- switch(trial_id,
+#                   "if1_hh"=expression("if"[1]*":HI"),
+#                   "if1_uh"=expression(paste(`if`[1], ":UI")),
+#                   "if1_u-Lh"=expression("if"[1]*":U"^-{}*"I"),
+#                   "if1_lh"=expression("if"[1]*":LI"),
+#                   "if2_hl"=expression("if"[2]*":HL"),
+#                   "if2_ul"=expression("if"[2]*":UL"),
+#                   "if2_u-Ll"=expression("if"[2]*":U"^-{}*"L"),
+#                   "if2_ll"=expression("if"[2]*":LL"))
+#     p <- ppc_dens_overlay(y = y, yrep = yrep) +
+#       labs(title = tit, x=lab_x)
+#     fn <- paste(target_dir, FS, "pp-tables-", trial_id, "_", world, 
+#                 ".png", sep="")
+#     ggsave(fn, p, width=7, height=5)
+#   })
+#   return(plots)
+# })
 
