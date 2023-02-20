@@ -209,25 +209,24 @@ plots_chains = map(c("alpha", "gamma", "shape1", "shape2"), function(par){
                  labeller = labeller(id = trial_names))
     ggsave(paste(target_dir, FS, 
                  paste("chains_marginal_", fn, ".png", sep = ""), sep=""), p2)
-    
     return(p)                 
   })
   return(plots)
 })
 # compute posterior means and MCMC diagnostics
 df.diagnostics = map(ind_trials, function(trial_id){
-    zoib_data = map(c("alpha", "gamma", "shape1", "shape2"), function(par){
-      vals = map(c("blue", "green"), function(p) {
-        fn <- paste(par, p, sep="_")
-        samples <- posterior_samples.long %>% 
-          filter(param == !!fn & id == !!trial_id)
-        mat <- samples %>% dplyr::select(Iteration, Chain, value) %>% 
-          rename(`.iteration`=Iteration, `.chain` = Chain) %>% 
-          posterior::as_draws_matrix()
-        df.summary = posterior::summarise_draws(mat) %>% mutate(variable = fn)
-        return(df.summary %>% add_column(id = trial_id))
-      })
-    }) %>% bind_rows()
+  zoib_data = map(c("alpha", "gamma", "shape1", "shape2"), function(par){
+    vals = map(c("blue", "green"), function(p) {
+      fn <- paste(par, p, sep="_")
+      samples <- posterior_samples.long %>% 
+        filter(param == !!fn & id == !!trial_id)
+      mat <- samples %>% dplyr::select(Iteration, Chain, value) %>% 
+        rename(`.iteration`=Iteration, `.chain` = Chain) %>% 
+        posterior::as_draws_matrix()
+      df.summary = posterior::summarise_draws(mat) %>% mutate(variable = fn)
+      return(df.summary %>% add_column(id = trial_id))
+    })
+  }) %>% bind_rows()
   # sigma
   samples <- posterior_samples.long %>% filter(param=="sd_delta" & id==trial_id)
   mat <- samples %>% dplyr::select(Iteration, Chain, value) %>% 
@@ -247,7 +246,6 @@ posterior_means <- df.diagnostics %>% dplyr::select(variable, mean, id) %>%
   separate(variable, into=c("par", "prob"), sep="_") %>% 
   arrange(prob)
 # posterior_means %>% filter(id == "independent_uh")
-
 
 # Plots with expected values of posterior distributions
 plots.pp_evs = map(ind_trials, function(trial_id){
@@ -284,49 +282,46 @@ plots.pp_evs
 
 # Generate new independent tables -----------------------------------------
 # generate set of dependent tables for each sample from posterior distribution (parameters)
-sampled_tables = map_dfr(ind_trials, function(trial_id){
-  message(trial_id)
-  samples_trial <- posterior_samples.ind %>% filter(id == trial_id) %>% 
-    filter(Iteration <= 100) #just use the first 100 samples, not all
-  #samples_trial <- posterior_means %>% filter(id == trial_id) #use evs
-  data_trial <- df.behav %>% filter(id == trial_id)
-  map(seq(1, nrow(samples_trial)), function(idx){
-    posterior_params <- samples_trial[idx,]
-    data_webppl <- list(probs = data_trial, evs_params = posterior_params)
-    
-    samples.ind_tables <- webppl(
-      program_file = here("webppl-model", "posterior-independent-data.wppl"),
-      random_seed = params$seed_webppl, #?
-      data_var = "data",
-      model_var = "sample_table",
-      data = data_webppl,
-      packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
-      inference_opts = list(method = "forward", samples = nrow(data_trial))
-    ) %>% as_tibble() %>% 
-      pivot_wider(names_from = "Parameter", values_from = "value") %>% 
-      add_column(id = trial_id)
-  })
-})
+sampled_tables <- sample_tables(df.behav, ind_trials, 
+                                posterior_samples.ind %>% filter(Iteration <= 100),
+  here("webppl-model", "posterior-independent-data.wppl")
+)
 save_data(sampled_tables, 
           paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
 
+sampled_tables.evs <- sample_tables(
+  df.behav, ind_trials, 
+  posterior_means %>% 
+    unite("name", par, prob, sep="_") %>% 
+    pivot_wider(names_from = "name", values_from = "mean"),
+  here("webppl-model", "posterior-independent-data.wppl"),
+  repetitions = 20
+)
+save_data(sampled_tables.evs, 
+          paste(target_dir, "sampled-tables-evs-posterior.rds", sep=FS))
+
+
 # plot new tables sampled for each independent context with observed data
-pp_plots_new_tables <- map(ind_trials[ind_trials != "independent_hh"], 
-                           function(trial_id){
-  df.trial <- df.behav %>% filter(id == trial_id)
-  df.samples <- sampled_tables %>% filter(id == trial_id)
-  tit <- trial_names[[trial_id]]
-  fn <- paste(target_dir, FS, paste("pp-tables-evs-posterior-", trial_id, 
-                                    ".png", sep=""), sep="")
-  p <- plot_new_tables(df.trial, df.samples, tit, fn)
-})
+make_pp_plots = function(df.behav, trials, sampled_tables, target_dir, fn_prefix){
+  pp_plots <- map(trials, function(trial_id){
+    df.trial <- df.behav %>% filter(id == trial_id)
+    df.samples <- sampled_tables %>% filter(id == trial_id)
+    tit <- trial_names[[trial_id]]
+    
+    fn <- paste(target_dir, FS, paste(fn_prefix, "_", trial_id, ".png", sep=""), sep="")
+    p <- plot_new_tables(df.trial, df.samples, tit, fn)
+  })
+  return(pp_plots)
+}
+pp_plots <- make_pp_plots(df.behav, ind_trials, #[ind_trials != "independent_hh"], 
+                          sampled_tables, target_dir, "pp-tables")
+pp_plots <- make_pp_plots(df.behav, ind_trials, 
+                          sampled_tables.evs, target_dir, "pp-tables-evs")
 
 # for independent_hh: (¬b¬g really small in sampled tables..!)
 df.trial <- df.behav %>% filter(id == "independent_hh")
 df.samples <- sampled_tables %>% filter(id == "independent_hh")
 tit <- trial_names[["independent_hh"]]
-fn <- paste(target_dir, "pp-tables-evs-posterior-independent_hh.png", sep=FS)
-
 plots.ind_hh = map(c("AC", "A-C", "-AC", "-A-C"), function(world){
   y <- df.trial[[world]]
   yrep <- df.samples %>%
@@ -336,7 +331,7 @@ plots.ind_hh = map(c("AC", "A-C", "-AC", "-A-C"), function(world){
   p <- ppc_dens_overlay(y = y, yrep = yrep) +
     labs(title = "ind:HH", x=lab_x)
   fn <- paste(target_dir,
-              paste("pp-tables-evs-posterior-independent_hh_", world, ".png",
+              paste("pp-tables_independent_hh_", world, ".png",
                     sep=""), sep=FS)
   ggsave(fn, p, width=7, height=5)
 })
@@ -373,6 +368,7 @@ likelihood_fn = function(df.samples, df.grp){
 }
 pp_samples_ll = group_map(posterior_samples.ind %>% group_by(id),
                           likelihood_fn) %>% bind_rows()
+save_data(pp_samples_ll, paste(target_dir, "pp_samples_ll.rds",sep = FS))
 
 # overall log likelihood of data from posterior predictive
 ll_X_obs.mean = pp_samples_ll %>% group_by(id) %>% 

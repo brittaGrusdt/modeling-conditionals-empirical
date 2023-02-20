@@ -3,6 +3,7 @@ var observed_ratings = data["probs"]
 
 var sample_table = function(){
   var params = data["evs_params"][0]
+  //display(params)
   var pars_if_bg =  {
     alpha: params.alpha_if_bg, gamma: params.gamma_if_bg,
     shape1: params.shape1_if_bg, shape2: params.shape2_if_bg
