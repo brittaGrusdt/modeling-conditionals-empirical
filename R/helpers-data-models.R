@@ -12,7 +12,7 @@ plot_new_tables <- function(df.trial, samples.tbls, tit, target_path){
   yrep <- matrix(data=NA, nrow=N_rep, N*4)
 
   # N_rep x N samples
-  for(i in seq(0, N_rep-1)){
+  for(i in seq(0, N_rep-1)){ 
     i_low <- i*N + 1
     i_up <- (i+1)*N
 
@@ -22,9 +22,12 @@ plot_new_tables <- function(df.trial, samples.tbls, tit, target_path){
     }
   }
   p <- ppc_dens_overlay_grouped(y=trial_behav, yrep = yrep, group = grp) +
-    theme(panel.spacing = unit(2, "lines")) + ggtitle(tit)
+    theme(panel.spacing = unit(2, "lines"), 
+          axis.text.x = element_text(size=10),
+          legend.position = "none") + 
+    ggtitle(tit)
   
-  ggsave(target_path, p) 
+  ggsave(target_path, p, width = 5, height=5) 
   return(p)
 }
 

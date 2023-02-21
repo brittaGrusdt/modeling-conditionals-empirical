@@ -1,11 +1,10 @@
 var par_zoibs = data["likelihoods_zoib"]
-//var par_gaussian = data["likelihoods_gaussian"]
-var pars_bernoulli_p_ind = data["likelihoods_bernoulli"]
+var par_gaussian = data["likelihoods_gaussian"]
+var prior_rel = data["prior_relations"]
 
-// var zoib_likelihoods = build_Pt_given_context_and_r(par_zoibs, "zero-one-inflated-beta")
-// //var gaussian_likelihoods = build_Pt_given_context_and_r(par_gaussian, "gaussian")
-// var bernoulli_likelihood_ind = build_Pt_given_context_and_r(par_bernoulli_ind, "bernoulli")
-var contexts = _.uniq(_.map(par_zoibs, 'id')).concat(_.uniq(_.map(pars_bernoulli_p_ind, 'id')))
+var contexts = _.uniq(_.map(par_zoibs, 'id')).concat(
+  _.uniq(_.map(par_gaussian, 'id'))
+)
 
 
 var params = {
@@ -18,9 +17,6 @@ var params = {
   // cost_conditional: data.cost_conditional
   p_utts: data.p_utts
 }
-// var PROLIFIC_IDS = _.uniq(_.map(OBSERVATIONS, 'prolific_id'))
-//var TRIALS = _.uniq(_.map(OBSERVATIONS, 'id'))
-
 setParams(params)
 // just for debugging
 var invalid_utts_states = check_states_utts(
@@ -58,9 +54,7 @@ var priors_conditioned = map(function(r) {
   return([r, prior_conditioned_r])
 }, RELATIONS)
 var prior_conditioned_r = Object.fromEntries(priors_conditioned)
-//prior_conditioned_r
-
 var posterior_states_contexts = get_posterior_given_context(
-  prior_conditioned_r, par_zoibs, pars_bernoulli_p_ind, contexts
+  prior_conditioned_r, par_zoibs, par_gaussian, contexts, prior_rel
 )
 posterior_states_contexts

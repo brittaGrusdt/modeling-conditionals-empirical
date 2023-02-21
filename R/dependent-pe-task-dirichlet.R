@@ -250,12 +250,13 @@ pp_plots <- map(df.brms %>% filter(relation!="independent") %>% pull(id) %>% uni
 
   p <- ppc_dens_overlay_grouped(y=y_vec, yrep = yrep_2d, group = grp) +
     labs(title = parse(text=tit_pblue[1])) +
-    theme(legend.position = "none")
-    
+    theme(panel.spacing = unit(2, "lines"), 
+          axis.text.x = element_text(size=10),
+          legend.position = "none")    
   
   fn <- paste(target_dir, FS, paste("pp-tables-evs-posterior-", trial_id, 
                                     ".png", sep=""), sep="")
-  ggsave(fn, plot = p)
+  ggsave(fn, plot = p, width = 5, height=5)
   return(p)
 })
 

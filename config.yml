@@ -110,4 +110,9 @@ cf_prior_match_kl:
   match_by: "KL-divergence"
 
 
+priors_relations:
+  uninformative: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context", 1/8, 1/8, 1/8, 1/8, 0.5, "if1",  1/8, 1/8, 1/8, 1/8, 0.5, "if2",  1/8, 1/8, 1/8, 1/8, 0.5, "independent")
+  informative: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context",1, 0, 0, 0, 0, "if1", 0.9, 0.1, 0, 0, 0, "if2", 0, 0, 0, 0, 1, "independent")
+
+
 # there needs to be 1 blank final line!
