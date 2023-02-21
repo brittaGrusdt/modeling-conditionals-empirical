@@ -1,30 +1,30 @@
 # load likelihood parameters fitted to data
-get_likelihood_params_fitted_data = function(result_dir, params){
-  
-  dep_data_dir = paste(result_dir, "dependent-contexts", sep=FS)
-  ind_data_dir = paste(result_dir, "independent-contexts", sep=FS)
-  
-  pars.dep <- readRDS(paste(dep_data_dir, "evs-posterior-dependent-data.rds", sep=FS)) %>% 
-    pivot_longer(cols=c(-id), names_to = "p", values_to = "value") %>% 
+get_likelihood_params_fitted_data = function(params){
+  pars.dep <- readRDS(here(params$dir_dep_likelihoods, params$fn_likelihoods)) %>% 
+    dplyr::select(variable, mean, id) %>% 
+    rename(p = variable) %>% 
     mutate(p = str_replace(p, "if_", "if")) %>% 
     separate(p, into = c("param", "p"), sep="_") %>% 
     mutate(p = str_replace(p, "if", "if_")) %>% 
-    pivot_wider(names_from = "param", values_from = "value")
+    pivot_wider(names_from = "param", values_from = "mean")
   
-  pars.ind <- readRDS(paste(ind_data_dir, "evs-posterior-independent-data.rds", sep=FS)) %>% 
-    dplyr::select(-theta_p) %>% 
-    pivot_longer(cols=c(-id), names_to = "p", values_to = "value") %>% 
+  pars.ind <- readRDS(here(params$dir_ind_likelihoods, params$fn_likelihoods))
+  pars.ind.zoib <- pars.ind  %>% 
+    dplyr::select(variable, mean, id) %>%
+    filter(variable != "sd_delta") %>% 
+    rename(p = variable) %>% 
     separate(p, into = c("param", "p"), sep="_") %>% 
-    pivot_wider(names_from = "param", values_from = "value")
+    pivot_wider(names_from = "param", values_from = "mean")
   
-  # noise added vs.subtracted to P(b)*P(g)
-  pars.ind.theta_p <- readRDS(
-    paste(ind_data_dir, "evs-posterior-independent-data.rds", sep=FS)
-  ) %>% dplyr::select(id, theta_p) %>%
-    rename(theta = theta_p)
+  pars.ind.gaussian <- pars.ind %>% 
+    dplyr::select(variable, mean, id) %>% 
+    rename(p = variable) %>% 
+    filter(p == "sd_delta") %>% 
+    separate(p, into = c("param", "p"), sep="_") %>% 
+    pivot_wider(names_from = "param", values_from = "mean")
   
-  pars = list(likelihoods_zoib = bind_rows(pars.dep, pars.ind),
-              likelihoods_bernoulli = pars.ind.theta_p)
+  pars = list(likelihoods_zoib = bind_rows(pars.dep, pars.ind.zoib),
+              likelihoods_gaussian = pars.ind.gaussian)
   return(pars)
 }
 

@@ -19,9 +19,10 @@ setParams(params)
 //   true
 // )
 var uc_data = data["observed_utts_ratios"]
+var prior_rel = data["prior_relations"]
 var par_zoibs = data["likelihoods_zoib"]
-var par_bernoulli = data["likelihoods_bernoulli"]
-var contexts = _.uniq(_.map(par_zoibs, 'id')).concat(_.uniq(_.map(par_bernoulli, 'id')))
+var par_gaussian = data["likelihoods_gaussian"]
+var contexts = _.uniq(_.map(par_zoibs, 'id')).concat(_.uniq(_.map(par_gaussian, 'id')))
 
 if(data["verbose"][0]) {
   display("free parameters:")
@@ -54,7 +55,7 @@ var priors_conditioned = map(function(r) {
 var prior_conditioned_r = Object.fromEntries(priors_conditioned)
 
 var posterior_states_contexts = get_posterior_given_context(
-  prior_conditioned_r, par_zoibs, par_bernoulli, contexts
+  prior_conditioned_r, par_zoibs, par_gaussian, contexts, prior_rel
 )
 //display(posterior_states_contexts["if1_uh"])
 

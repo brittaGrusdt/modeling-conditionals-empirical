@@ -49,7 +49,9 @@ default:
   #           - if set to "" no condition, just sampled from prior as usual
   utt: ""
   n_samples: 0 # bns given by empirical tables
-
+  dir_dep_likelihoods: !expr paste("results", "default-prior", "dependent-contexts", "zoib-model", sep=.Platform$file.sep)
+  dir_ind_likelihoods: !expr paste("results", "default-prior", "independent-contexts", "zoib-model", sep=.Platform$file.sep)
+  fn_likelihoods: "mean-posteriors-and-diagnostics.rds"
 
 cleaned_data:
   fn_tbls_empiric_pids: "tables-empiric-pids.rds"
@@ -71,12 +73,10 @@ recleaned_data:
 default_prior:
   dir_results: !expr paste("results", "default-prior", sep=.Platform$file.sep)
   name: "default-prior"
-  fit_ind_prior_mu: !expr list(mu = 0, sigma = 1, width = 0.01)
-  fit_ind_prior_sigma: !expr list(a = 0, b = 0.5, width = 0.01)
-  noise_shape1: 1
-  noise_shape2: 10
-  causal_power_shape1: 10
-  causal_power_shape2: 1
+  # noise_shape1: 1
+  # noise_shape2: 10
+  # causal_power_shape1: 10
+  # causal_power_shape2: 1
   conditional_probs: !expr tibble::tribble(~grp, ~variable, ~shape1, ~shape2,
                                            "high", "causal_power", 10, 1,
                                            "high", "noise", 10, 1,
@@ -99,15 +99,15 @@ default_prior:
   rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
   p_a: !expr c("high", "low", "unc")
   p_c: !expr c("high", "low", "unc")
-  fn_kl_divergences: "best-kl-divergences.rds"
+  #fn_kl_divergences: "best-kl-divergences.rds"
 
-cf_prior_match_tables:
-  inherits: default_prior
-  match_by: "tables"
-
-cf_prior_match_kl:
-  inherits: default_prior
-  match_by: "KL-divergence"
+# cf_prior_match_tables:
+#   inherits: default_prior
+#   match_by: "tables"
+# 
+# cf_prior_match_kl:
+#   inherits: default_prior
+#   match_by: "KL-divergence"
 
 
 priors_relations:

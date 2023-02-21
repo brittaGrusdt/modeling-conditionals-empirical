@@ -6,6 +6,7 @@ library(ExpDataWrangling)
 library(ModelUtils)
 library(ggthemes)
 source(here("R", "plot-functions.R"))
+source(here("R", "helpers-load-data.R"))
 
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
 
@@ -73,23 +74,9 @@ params$prior_samples = states
 # params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
 
 # load likelihood parameters (for fitted data)
-pars.dep <- readRDS(paste(dep_data_dir, "mean-posteriors-and-diagnostics.rds", sep=FS)) %>% 
-  rename(p=variable) %>% dplyr::select(p, mean, id) %>% 
-  mutate(p = str_replace(p, "if_", "if")) %>% 
-  separate(p, into = c("param", "p"), sep="_") %>% 
-  mutate(p = str_replace(p, "if", "if_")) %>% 
-  pivot_wider(names_from = "param", values_from = "mean")
-
-pars.ind <- readRDS(paste(ind_data_dir, "mean-posteriors-and-diagnostics.rds", sep=FS)) %>% 
-  rename(p=variable) %>% dplyr::select(p, mean, id) %>%  
-  separate(p, into = c("param", "p"), sep="_")
-pars.ind.zoib <- pars.ind %>% filter(param != "sd") %>% 
-  pivot_wider(names_from = "param", values_from = "mean")
-pars.ind.gaussian <- pars.ind %>% filter(param == "sd") %>% 
-  pivot_wider(names_from = "param", values_from = "mean")
-
-params$likelihoods_zoib <- bind_rows(pars.dep, pars.ind.zoib)
-params$likelihoods_gaussian <- pars.ind.gaussian
+pars_likelihoods <- get_likelihood_params_fitted_data(params)
+params$likelihoods_zoib <- pars_likelihoods$likelihoods_zoib
+params$likelihoods_gaussian <- pars_likelihoods$likelihoods_gaussian
 
 # Weights by contexts (M_Ci) ----------------------------------------------
 params$packages <- c(params$packages, paste("webppl-model", "node_modules", 

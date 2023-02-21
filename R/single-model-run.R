@@ -34,7 +34,7 @@ pars.observations <- get_observed_data(data.behav, params)
 # draw samples from prior
 pars.rsa_states <- get_rsa_states(params)
 # load likelihood parameters fitted to data
-pars.likelihoods <- get_likelihood_params_fitted_data(here(params$dir_results), params)
+pars.likelihoods <- get_likelihood_params_fitted_data(params)
 # if not provided, all utterances equally likely
 # params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
 params <- c(params, pars.observations, pars.likelihoods, pars.rsa_states)
@@ -44,86 +44,32 @@ params <- c(params, pars.observations, pars.likelihoods, pars.rsa_states)
 path_model_file = paste(params$dir_wppl_code, "model-single-run-by-contexts.wppl", sep=FS)
 params$packages <- c(params$packages, paste("webppl-model", "node_modules", 
                                             "dataHelpers", sep = FS))
+
+active_config = "priors_relations"
+Sys.setenv(R_CONFIG_ACTIVE = active_config)
+par_relations <- config::get()
+params$prior_relations <- par_relations[["informative"]]
+
 posterior <- run_webppl(path_model_file, params)
-model_predictions.ci <- posterior %>% 
+model.predictions <- posterior %>% 
   map(function(x){as_tibble(x) %>% mutate(ll_ci = as.numeric(ll_ci))}) %>% 
   bind_rows() %>% group_by(id) %>% 
   mutate(p_hat_round = round(p_hat, 2)) %>% 
   arrange(desc(p_hat))
 
-production.joint.ci = left_join(model_predictions.ci, 
+production.joint = left_join(model.predictions, 
                              params$observed_utts_ratios %>% rename(p = ratio)) %>% 
   rename(model = p_hat, behavioral = p) %>% 
   mutate(relation = case_when(startsWith(id, "independent") ~ "independent", 
                               startsWith(id, "if1") ~ "if1",
                               startsWith(id, "if2") ~ "if2"))
 
-plot_correlation(production.joint.ci, color = "id") + facet_wrap(~id)
+plot_correlation(production.joint, color = "id") + facet_wrap(~id)
 
 
 
 
-# Predictions by each participant -----------------------------------------
-path_model_file = paste(params$dir_wppl_code, "model-single-run-by-dij.wppl", sep=FS)
-posterior <- run_webppl(path_model_file, params)
-model_predictions.dij <- posterior %>% 
-  map(function(x){
-    as_tibble(x$predictions) %>% 
-      mutate(ll_subj = as.numeric(ll_subj), 
-             id = x$id)
-    }) %>% 
-  bind_rows() %>% group_by(id, prolific_id) %>% 
-  unnest(c(prediction.probs, prediction.support)) %>% 
-  rename(p_hat = prediction.probs, utterance = prediction.support) %>% 
-  mutate(p_hat_round = round(p_hat, 2)) %>% 
-  arrange(desc(p_hat))
 
-# prediction (1xnb_utterances) for each participant and trial
-production.joint.dij = left_join(
-  model_predictions.dij, 
-  params$observations %>% dplyr::select(prolific_id, id, utterance) %>% 
-    rename(uc_task = utterance)
-) %>% rename(model = p_hat)
-
-# average prediction across all participants
-model.avg <- production.joint.dij %>% group_by(id, utterance) %>% 
-  summarize(model = mean(model), .groups = "drop_last")
-behav.avg <- pars.observations$observed_utts_ratios %>%
-  rename(behavioral = ratio) %>% 
-  dplyr::select(id, utterance, behavioral)
-joint.avg.dij <- left_join(model.avg, behav.avg) %>% 
-  mutate(behavioral = case_when(is.na(behavioral) ~ 0, T ~ behavioral))
-
-joint.avg.dij %>% 
-  ggplot(aes(x=behavioral, y = model)) +
-  geom_point(aes(color = utterance)) +
-  geom_smooth(method = 'lm')
-
-joint.avg.dij %>% 
-  ggplot(aes(x=behavioral, y = model)) +
-  geom_point(aes(color = utterance)) +
-  facet_wrap(~id)
-
-# just models best prediction per dij
-model.best <- production.joint.dij %>% filter(model == max(model)) %>% 
-  group_by(id, utterance) %>% 
-  summarize(n = n(), .groups = "drop_last") %>% 
-  mutate(model = n / sum(n)) %>% dplyr::select(-n)
-
-# plot for single participant
-production.joint.dij %>% filter(prolific_id == "5ee454ad40c72e152991826e") %>% 
-  mutate(utterance = factor(utterance, 
-                            levels = c("might A", "might C", "might -A", "might -C",
-                                      "C and A", "C and -A", "-C and A", "-C and -A",
-                                      "A", "C", "-A", "-C",
-                                      "A > C", "A > -C", "-A > C", "-A > -C",
-                                      "C > A", "C > -A", "-C > A", "-C > -A"
-  ))) %>% 
-  ggplot(aes(x = model, y = utterance)) +
-  geom_bar(stat = "identity") + 
-  geom_point(aes(x = 0, y = uc_task), size=1.5, color = 'red') + 
-  labs(y = "utterance", x = "predicted speaker probability") + 
-  facet_wrap(~id, scales = "free_y")
 
 
 
