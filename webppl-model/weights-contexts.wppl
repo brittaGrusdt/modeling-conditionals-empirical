@@ -53,7 +53,9 @@ var priors_conditioned = map(function(r) {
     }, method: 'enumerate'})
   return([r, prior_conditioned_r])
 }, RELATIONS)
+
 var prior_conditioned_r = Object.fromEntries(priors_conditioned)
+
 var posterior_states_contexts = get_posterior_given_context(
   prior_conditioned_r, par_zoibs, par_gaussian, contexts, prior_rel
 )

@@ -97,8 +97,9 @@ weights = map(c("uninformative", "informative"), function(prior_r){
     add_column(prior_r = prior_r)
 }) %>% bind_rows() 
 
-save_data(weights %>% dplyr::select(id, bn_id, probs), 
-          paste(result_dir, "weights_ci.rds", sep=FS))
+save_data(weights %>% dplyr::select(id, bn_id, probs, prior_r), 
+          paste(result_dir, FS, "weights_ci_", params$n_forward_samples, ".rds", 
+                sep=""))
 
 # analyze weights
 weights %>% group_by(prior_r, id) %>% summarize(n_states = n())

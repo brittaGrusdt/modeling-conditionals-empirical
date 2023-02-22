@@ -10,11 +10,6 @@ globalStore.cost = {
   literal: data["cost_literal"][0]
 }
 
-// globalStore.beta_shape1 = data["noise_shape1"] ? data["noise_shape1"][0] : []
-// globalStore.beta_shape2 = data["noise_shape2"] ? data["noise_shape2"][0] : []
-// globalStore.theta_shape1 = data["causal_power_shape1"] ? data["causal_power_shape1"][0] : []
-// globalStore.theta_shape2 = data["causal_power_shape2"] ? data["causal_power_shape2"][0] : []
-
 globalStore.thresholds = {theta: data["theta"][0], theta_might: data["theta_might"][0]}
 globalStore.ps_utts = data["p_utts"]
 
@@ -61,7 +56,7 @@ var run_speaker = function(bns){
 
 // RUN MODEL
 if(LEVEL_MAX == "speaker" || LEVEL_MAX == "speaker0"){
-  var n_samples = data["n_samples"][0]
+  var n_samples = data["n_forward_samples"][0]
   // define set of input states for speaker
   // 1. draw n_samples from prior or
   // 2. compute predictions just for given set of bn_ids or

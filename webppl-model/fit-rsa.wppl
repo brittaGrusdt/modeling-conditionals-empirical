@@ -4,8 +4,11 @@ var observed_counts = data["observed_utts_ratios"]
 var contexts = _.uniq(_.map(observed_counts, 'id'))
 
 var par_zoibs = data["likelihoods_zoib"]
-var pars_bernoulli = data["likelihoods_bernoulli"]
+var par_gaussian = data["likelihoods_gaussian"]
+var prior_rel = data["prior_relations"]
 
+var prior_samples_with_weights = data["p_s_ci"]
+//display(prior_samples_with_weights)
 /*
 // ************ States used for model predictions for each trial ************ //
 // get Bayes nets used for predictions for each trial + participant
@@ -23,10 +26,14 @@ var priors_conditioned = map(function(r) {
 }, RELATIONS)
 var prior_conditioned_r = Object.fromEntries(priors_conditioned)
 
-var posterior_states_contexts = get_posterior_given_context(
-  prior_conditioned_r, par_zoibs, pars_bernoulli, contexts
+// var posterior_states_contexts = get_posterior_given_context(
+//   prior_conditioned_r, par_zoibs, par_gaussian, contexts, prior_rel
+// )
+// load precomputed weights
+var posterior_states_contexts = build_posterior_states_given_context_from_data(
+  prior_samples_with_weights, contexts
 )
-
+//display(posterior_states_contexts.if1_uh.support())
 
 var non_normalized_posterior = function() {
   var params = priorSample(PARAMS_TO_FIT)
@@ -44,8 +51,10 @@ var non_normalized_posterior = function() {
   )
   condition(invalid_utts_states.states.length == 0)
   condition(invalid_utts_states.utts.length == 0)
-  // // RUN MODEL
+
+  // RUN MODEL
   var rsa_speaker_predictions = run_speaker(ALL_BNS, false)
+
   // predictions 4 (close to) certain worlds
   var predictions_certain_worlds_list = map(function(bn){
     return([bn.w, rsa_speaker_predictions[bn.bn_id]])
@@ -54,25 +63,39 @@ var non_normalized_posterior = function() {
   var predictions_certain_worlds = Object.fromEntries(predictions_certain_worlds_list)
   var speaker_predictions = predictions_with_gamma(rsa_speaker_predictions,
                                                    predictions_certain_worlds)
+  //display(speaker_predictions)
+
   // get predictions + compute log likelihood of utterance choices given model predictions
-
-
   var log_likelihoods = map(function(context) {
     var observed_ci = filter(function(obj){
       return(obj.id == context)
     }, observed_counts)
 
+    var Weights = posterior_states_contexts[context]
+    var pars_weights = Object.values(Weights.params)
+    var p_states = pars_weights[1]
+    var states_ids = _.map(pars_weights[0], 'bn_id')
+
     var model_prediction = get_weighted_rsa_prediction(
-      speaker_predictions, posterior_states_contexts[context]
+      speaker_predictions,states_ids, p_states
     )
-    // display(model_prediction)
     var ll = get_log_likelihood_by_context(observed_ci, model_prediction)
     return(ll)
   }, contexts)
+
   var summed_log_likelihood = sum(log_likelihoods)
+  //display(summed_log_likelihood)
+
   factor(summed_log_likelihood)
 
-  return(params)
+  // I dont know why but if I return the object 'params' directly, I only
+  // get the latest value back ... so for 100 final samples, I get 100 values,
+  // but always the same even though when printing the sampled parameter values,
+  // these are different (as they should)
+  return({
+    alpha: params.alpha,
+    theta: params.theta,
+    gamma: params.gamma,
+    utt_cost: params.utt_cost
+  })
 }
-
-non_normalized_posterior

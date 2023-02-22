@@ -26,7 +26,7 @@ default:
   gamma: 1
   theta: 0.7
   theta_might: 0
-  n_forward_samples: 1000
+  n_forward_samples: 100
   verbose: true
   causal_nets_dep: !expr c("A implies C_unif-high-low",
                            "C implies A_unif-high-low", 
@@ -48,7 +48,6 @@ default:
   #           large (see in webppl file) for all states given to the speaker,
   #           - if set to "" no condition, just sampled from prior as usual
   utt: ""
-  n_samples: 0 # bns given by empirical tables
   dir_dep_likelihoods: !expr paste("results", "default-prior", "dependent-contexts", "zoib-model", sep=.Platform$file.sep)
   dir_ind_likelihoods: !expr paste("results", "default-prior", "independent-contexts", "zoib-model", sep=.Platform$file.sep)
   fn_likelihoods: "mean-posteriors-and-diagnostics.rds"
@@ -73,10 +72,6 @@ recleaned_data:
 default_prior:
   dir_results: !expr paste("results", "default-prior", sep=.Platform$file.sep)
   name: "default-prior"
-  # noise_shape1: 1
-  # noise_shape2: 10
-  # causal_power_shape1: 10
-  # causal_power_shape2: 1
   conditional_probs: !expr tibble::tribble(~grp, ~variable, ~shape1, ~shape2,
                                            "high", "causal_power", 10, 1,
                                            "high", "noise", 10, 1,

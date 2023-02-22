@@ -57,7 +57,6 @@ var prior_conditioned_r = Object.fromEntries(priors_conditioned)
 var posterior_states_contexts = get_posterior_given_context(
   prior_conditioned_r, par_zoibs, par_gaussian, contexts, prior_rel
 )
-//display(posterior_states_contexts["if1_uh"])
 
 // RUN MODEL
 var rsa_speaker_predictions = run_speaker(ALL_BNS, false)
@@ -79,8 +78,19 @@ var result = map(function(c_i) {
     return(obj.id == c_i)
   }, uc_data)
 
+  var Weights = posterior_states_contexts[c_i]
+  // note: Object.values(Weights.params) returns a list with an object
+  // mapping from support-values to an object
+  // (Weights is a distribution built with Infer, not a specific built-in Distribution!
+  // this is important because otherweise Weights.params returns a different structure!)
+  // {val: `the respective support value', prob: `its probability`} -> using twice Object.values()!
+  var state_prob_pairs = Object.values(Object.values(Weights.params)[0])
+  var states = _.map(state_prob_pairs, 'val')
+  var states_ids = _.map(states, 'bn_id')
+  var states_probs = _.map(state_prob_pairs, 'prob')
+
   var model_prediction = get_weighted_rsa_prediction(
-    speaker_predictions, posterior_states_contexts[c_i]
+    speaker_predictions, states_ids, states_probs
   )
   // display(model_prediction)
 
