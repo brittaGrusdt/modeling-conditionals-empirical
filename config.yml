@@ -51,6 +51,7 @@ default:
   dir_dep_likelihoods: !expr paste("results", "default-prior", "dependent-contexts", "zoib-model", sep=.Platform$file.sep)
   dir_ind_likelihoods: !expr paste("results", "default-prior", "independent-contexts", "zoib-model", sep=.Platform$file.sep)
   fn_likelihoods: "mean-posteriors-and-diagnostics.rds"
+  speaker_type: 'pragmatic'
 
 cleaned_data:
   fn_tbls_empiric_pids: "tables-empiric-pids.rds"

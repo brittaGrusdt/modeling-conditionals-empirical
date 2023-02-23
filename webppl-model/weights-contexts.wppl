@@ -6,15 +6,10 @@ var contexts = _.uniq(_.map(par_zoibs, 'id')).concat(
   _.uniq(_.map(par_gaussian, 'id'))
 )
 
-
 var params = {
   alpha: data.alpha,
   gamma: data.gamma,
   theta: data.theta,
-  // cost_literal: data.cost_literal,
-  // cost_conjunction: data.cost_conjunction,
-  // cost_might: data.cost_might,
-  // cost_conditional: data.cost_conditional
   p_utts: data.p_utts
 }
 setParams(params)
@@ -34,7 +29,6 @@ if(data["verbose"][0]) {
   display("theta: " + globalStore.thresholds.theta)
   display("theta_might: " + globalStore.thresholds.theta_might)
   // display('vs_utts' + globalStore.utterances)
-  // display('ps_utts' + globalStore.ps_utts)
   display('informativeness utterance types:')
   display("# conjunctions: " + globalStore.states_conjunction.length)
   display("# literals: " + globalStore.states_literal.length)

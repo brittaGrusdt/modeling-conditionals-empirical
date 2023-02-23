@@ -2,13 +2,8 @@ var params = {
   alpha: data.alpha,
   gamma: data.gamma,
   theta: data.theta,
-  // cost_literal: data.cost_literal,
-  // cost_conjunction: data.cost_conjunction,
-  // cost_might: data.cost_might,
-  // cost_conditional: data.cost_conditional
-  p_utts: data.p_utts
+  utt_cost: data.utt_cost[0]
 }
-
 setParams(params)
 // just for debugging
 // var invalid_utts_states = check_states_utts(
@@ -24,14 +19,14 @@ var par_zoibs = data["likelihoods_zoib"]
 var par_gaussian = data["likelihoods_gaussian"]
 var contexts = _.uniq(_.map(par_zoibs, 'id')).concat(_.uniq(_.map(par_gaussian, 'id')))
 
+var speaker_type = data["speaker_type"]
+
 if(data["verbose"][0]) {
   display("free parameters:")
   display("alpha: " + globalStore.alpha)
   display("gamma: " + globalStore.gamma)
   display("theta: " + globalStore.thresholds.theta)
   display("theta_might: " + globalStore.thresholds.theta_might)
-  // display('vs_utts' + globalStore.utterances)
-  // display('ps_utts' + globalStore.ps_utts)
   display('informativeness utterance types:')
   display("# conjunctions: " + globalStore.states_conjunction.length)
   display("# literals: " + globalStore.states_literal.length)
@@ -59,9 +54,9 @@ var posterior_states_contexts = get_posterior_given_context(
 )
 
 // RUN MODEL
-var rsa_speaker_predictions = run_speaker(ALL_BNS, false)
+var rsa_speaker_predictions = run_speaker(ALL_BNS, speaker_type, false)
+//display(rsa_speaker_predictions)
 //var x = rsa_speaker_predictions['-A implies C_unc-high-low_0.006224644725537807_0.550477986004518_0.43128676552264295_0.012010603747301285']
-
 // predictions 4 (close to) certain worlds
 var predictions_certain_worlds_list = map(function(bn){
   return([bn.w, rsa_speaker_predictions[bn.bn_id]])

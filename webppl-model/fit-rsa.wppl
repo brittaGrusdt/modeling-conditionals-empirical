@@ -8,6 +8,8 @@ var par_gaussian = data["likelihoods_gaussian"]
 var prior_rel = data["prior_relations"]
 
 var prior_samples_with_weights = data["p_s_ci"]
+
+var speaker_type = data["speaker_type"]
 //display(prior_samples_with_weights)
 /*
 // ************ States used for model predictions for each trial ************ //
@@ -53,7 +55,7 @@ var non_normalized_posterior = function() {
   condition(invalid_utts_states.utts.length == 0)
 
   // RUN MODEL
-  var rsa_speaker_predictions = run_speaker(ALL_BNS, false)
+  var rsa_speaker_predictions = run_speaker(ALL_BNS, speaker_type, false)
 
   // predictions 4 (close to) certain worlds
   var predictions_certain_worlds_list = map(function(bn){
@@ -63,7 +65,6 @@ var non_normalized_posterior = function() {
   var predictions_certain_worlds = Object.fromEntries(predictions_certain_worlds_list)
   var speaker_predictions = predictions_with_gamma(rsa_speaker_predictions,
                                                    predictions_certain_worlds)
-  //display(speaker_predictions)
 
   // get predictions + compute log likelihood of utterance choices given model predictions
   var log_likelihoods = map(function(context) {
@@ -92,10 +93,16 @@ var non_normalized_posterior = function() {
   // get the latest value back ... so for 100 final samples, I get 100 values,
   // but always the same even though when printing the sampled parameter values,
   // these are different (as they should)
-  return({
-    alpha: params.alpha,
-    theta: params.theta,
-    gamma: params.gamma,
-    utt_cost: params.utt_cost
-  })
+
+  query.add("utts", params.utt_cost)
+  query.add("alpha", params.alpha)
+  query.add("theta", params.theta)
+  query.add("gamma", params.gamma)
+  return(query)
+  // return({
+  //   alpha: params.alpha,
+  //   theta: params.theta,
+  //   gamma: params.gamma,
+  //   utt_cost: params.utt_cost
+  // })
 }

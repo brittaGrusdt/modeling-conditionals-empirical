@@ -50,6 +50,15 @@ Sys.setenv(R_CONFIG_ACTIVE = active_config)
 par_relations <- config::get()
 params$prior_relations <- par_relations[["informative"]]
 
+
+params$alpha <- 1.81
+params$theta <- 0.79
+# set utt cost
+params$utt_cost <- params_evs %>% filter(!Parameter %in% c("alpha", "theta")) %>% 
+  filter(Chain==1) %>% dplyr::select(-Chain) %>% 
+  pivot_wider(names_from="Parameter", values_from="value")
+
+params$speaker_type <- "pragmatic"
 posterior <- run_webppl(path_model_file, params)
 model.predictions <- posterior %>% 
   map(function(x){as_tibble(x) %>% mutate(ll_ci = as.numeric(ll_ci))}) %>% 
@@ -65,7 +74,10 @@ production.joint = left_join(model.predictions,
                               startsWith(id, "if2") ~ "if2"))
 
 plot_correlation(production.joint, color = "id") + facet_wrap(~id)
-
+plot_model_vs_data_bars(production.joint, 
+                        str_flatten(c("alpha", params$alpha, "theta", 
+                                      params$theta), collapse="_"), 
+                        by_utt_type = T)
 
 
 

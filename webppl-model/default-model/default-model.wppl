@@ -47,7 +47,7 @@ var wrap_ll = function(u){
 var run_speaker = function(bns){
   var distrs = map(function(bn){
     return(LEVEL_MAX == "speaker" ? speaker(bn, false) :
-           (LEVEL_MAX == "speaker0" ? speaker0(bn, false) : undefined))
+           (LEVEL_MAX == "speaker_lit" ? speaker_lit(bn, false) : undefined))
   }, bns)
 
   var distributions = {"speaker_": distrs, "bns": bns}
@@ -55,7 +55,7 @@ var run_speaker = function(bns){
 }
 
 // RUN MODEL
-if(LEVEL_MAX == "speaker" || LEVEL_MAX == "speaker0"){
+if(LEVEL_MAX == "speaker" || LEVEL_MAX == "speaker_lit"){
   var n_samples = data["n_forward_samples"][0]
   // define set of input states for speaker
   // 1. draw n_samples from prior or
