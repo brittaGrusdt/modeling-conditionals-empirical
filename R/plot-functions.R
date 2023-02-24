@@ -26,7 +26,9 @@ plot_correlation = function(results.joint,
 plot_model_vs_data_bars = function(df.joint, tit = "", by_utt_type=F){
   df.long <- df.joint %>%
     pivot_longer(cols = c("model", "behavioral"), names_to = "data",
-                 values_to = "probability")
+                 values_to = "probability") %>% 
+    arrange(data, id, desc(probability)) %>% 
+    group_by(data, id) %>% mutate(cdf = cumsum(probability))
   if(by_utt_type){
     df.long <- df.long %>% mutate(utt=utterance) %>% chunk_utterances() %>% 
       rename(utt_type = utterance, utterance = utt) %>% 
@@ -36,10 +38,11 @@ plot_model_vs_data_bars = function(df.joint, tit = "", by_utt_type=F){
   }
   plots = map(df.long$relation %>% unique(), function(rel){
     p <- df.long %>% filter(relation == !!rel) %>% 
+      filter(cdf <= 0.99) %>% 
       ggplot(aes(y=utterance, x=probability, fill=data)) + 
       geom_bar(stat="identity", position = position_dodge()) +
       labs(x = "condition", title = tit) + 
-      facet_wrap(~id, scales = "free") +
+      facet_wrap(~id, scales = "free_y") +
       scale_fill_manual(values = names_data)
     return(p)
   })

@@ -2,8 +2,11 @@ var params = {
   alpha: data.alpha,
   gamma: data.gamma,
   theta: data.theta,
-  utt_cost: data.utt_cost[0]
+  utt_cost: Object.fromEntries(
+   zip(_.map(data.utt_cost, 'utterance'), _.map(data.utt_cost, 'cost'))
+  )
 }
+
 setParams(params)
 // just for debugging
 // var invalid_utts_states = check_states_utts(
