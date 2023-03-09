@@ -172,15 +172,15 @@ sampled_tables.evs <- sample_tables(
     unite("name", par, prob, sep="_") %>%
     pivot_wider(names_from = "name", values_from = "mean"),
   here("webppl-model", "posterior-dependent-data.wppl"), 
-  repetitions = 20
+  repetitions = 100
 )
-save_data(sampled_tables.evs, paste(target_dir, "sampled-tables-evs.rds", sep=FS))
+save_data(sampled_tables.evs, paste(target_dir, "sampled-tables-evs-posterior.rds", sep=FS))
 
 pp_plots = make_pp_plots_new_dependent_tables(
-  df.dep, sampled_tables.evs, dep_trials, target_dir, "pp-tables-evs"
+  df.dep, sampled_tables.evs, dep_trials, target_dir, "predicted-tables-evs-posterior"
 )
 pp_plots = make_pp_plots_new_dependent_tables(
-  df.dep, sampled_tables, dep_trials,target_dir, "pp-tables"
+  df.dep, sampled_tables, dep_trials, target_dir, "pp-tables"
 )
 
 # Posterior predictive ----------------------------------------------------

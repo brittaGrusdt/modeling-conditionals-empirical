@@ -1,4 +1,4 @@
-plot_new_tables <- function(df.trial, samples.tbls, tit, target_path){
+plot_new_tables <- function(df.trial, samples.tbls, tit, target_path=NA){
   N = nrow(df.trial)
   grp <- rep(factor(c("bg", "b¬g", "¬bg", "¬b¬g"),
                     levels = c("bg", "b¬g", "¬bg", "¬b¬g")), N)
@@ -25,9 +25,11 @@ plot_new_tables <- function(df.trial, samples.tbls, tit, target_path){
     theme(panel.spacing = unit(2, "lines"), 
           axis.text.x = element_text(size=10),
           legend.position = "none") + 
+    #by default ppc_dens_overlay does not use scales=free!
+    facet_wrap("group", scales = "free") + 
     ggtitle(tit)
   
-  ggsave(target_path, p, width = 5, height=5) 
+  if(!is.na(target_path)) ggsave(target_path, p, width = 5, height=5) 
   return(p)
 }
 

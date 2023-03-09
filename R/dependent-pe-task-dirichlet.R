@@ -252,10 +252,10 @@ pp_plots <- map(df.brms %>% filter(relation!="independent") %>% pull(id) %>% uni
     labs(title = parse(text=tit_pblue[1])) +
     theme(panel.spacing = unit(2, "lines"), 
           axis.text.x = element_text(size=10),
-          legend.position = "none")    
+          legend.position = "none") + 
+    facet_wrap("group", scales = "free") #by default ppc_dens_overlay uses fixed scales!
   
-  fn <- paste(target_dir, FS, paste("pp-tables-evs-posterior-", trial_id, 
-                                    ".png", sep=""), sep="")
+  fn <- paste(target_dir, FS, paste("pp-tables-", trial_id, ".png", sep=""), sep="")
   ggsave(fn, plot = p, width = 5, height=5)
   return(p)
 })
@@ -330,7 +330,7 @@ pp_plots_means <- map(c("if1", "if2"), function(relation){
       geom_ribbon(data = pp_hdis,aes(ymin=lower, ymax=upper), alpha=0.5) +
       ggtitle(tit)
     
-      ggsave(paste(target_dir, FS, "pp_", cond, ".png", sep=""), plot = p)
+      ggsave(paste(target_dir, FS, "pp-evs-", cond, ".png", sep=""), plot = p)
     return(p)
   })
 })
