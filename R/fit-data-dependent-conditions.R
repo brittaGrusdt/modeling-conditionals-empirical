@@ -17,6 +17,7 @@ library(emmeans)
 library(brms)
 
 source(here("R", "helpers-data-models.R"))
+source(here("R", "helpers-plotting.R"))
 
 # for plots
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
@@ -71,7 +72,6 @@ dep_trials = c(df.dep$id %>% unique())
 ####          Dependent Trials                        ####   
 #### fit Zero-inflated Beta P(a), P(c|a), P(c|¬a)     ####
 ##########################################################
-
 posterior_samples.dep = map_dfr(dep_trials, function(trial_id){
   message(trial_id)
   df.trial = df.dep %>% filter(id == trial_id)
@@ -271,14 +271,6 @@ p.if2 <- df.ll_X %>% filter(startsWith(trial, "if2")) %>%
   labs(x = "log likelihood", y = "density")
 p.if2
 
-# returns matrix nb.drawn samples x N=nb.participants, 
-# for a single sampled value, given in arg 'col'
-format_sampled_ps <- function(df, col) {
-  df %>% dplyr::select(idx_sample, id_subj, !!col) %>% 
-    group_by(idx_sample) %>% 
-    pivot_wider(names_from="id_subj", values_from=col) %>% 
-    ungroup() %>% dplyr::select(-idx_sample) %>% as.matrix()
-}
 # posterior predictive plots (new sampled data for the 3 probabilities)
 df.pp_x <- pp_samples_ll %>% dplyr::select(x_blue, x_if_bg, x_if_nbg, id, trial) %>% 
   group_by(id) %>% 

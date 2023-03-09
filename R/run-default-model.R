@@ -7,8 +7,9 @@ library(ModelUtils)
 library(ggpubr)
 
 source(here("R", "generate-model-states.R"))
-source(here("R", "plot-functions.R"))
+source(here("R", "helpers-plotting.R"))
 source(here("R", "prediction-functions.R"))
+
 # Runs default-model
 # Setup -------------------------------------------------------------------
 # Prior
