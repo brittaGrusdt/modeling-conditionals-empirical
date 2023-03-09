@@ -48,3 +48,13 @@ plot_model_vs_data_bars = function(df.joint, tit = "", by_utt_type=F){
   })
   return(plots)
 }
+
+# returns matrix nb.drawn samples x N=nb.participants, 
+# for a single sampled value, given in arg 'col'
+format_sampled_ps <- function(df, col) {
+  df %>% dplyr::select(idx_sample, id_subj, !!col) %>% 
+    group_by(idx_sample) %>% 
+    pivot_wider(names_from="id_subj", values_from=col) %>% 
+    ungroup() %>% dplyr::select(-idx_sample) %>% as.matrix()
+}
+
