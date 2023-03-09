@@ -5,7 +5,7 @@ var sampled_params = data["sampled_params"]
 var rsa_predictions = map(function(pars){
   var data_from_r = Object.assign(data, pars)
   var rsa_predictions = run_rsa_model(data_from_r)
-  return([pars.id_sample, rsa_predictions])
+  return([pars.sample_id, rsa_predictions])
 }, sampled_params)
 
 Object.fromEntries(rsa_predictions)

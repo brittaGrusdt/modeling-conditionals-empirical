@@ -46,7 +46,7 @@ get_rsa_states = function(params){
   return(pars)
 }
 
-get_observed_data = function(data.behav, params){
+get_observed_data = function(data.behav, params, cutoff=F){
   data.uc = data.behav %>%  filter(!is.na(uc_task)) %>% 
     dplyr::select(prolific_id, id, utterance) %>% 
     add_column(n = 1) %>% group_by(id, utterance)
@@ -59,6 +59,13 @@ get_observed_data = function(data.behav, params){
            `-A-C` = `neither block falls`)
   # all subjects and trials
   data.observed = left_join(data.uc, data.pe)
+  if(cutoff){
+    utts_low_freq = data.observed %>% 
+      group_by(utterance) %>% dplyr::count() %>% 
+      arrange(desc(n)) %>% ungroup() %>% mutate(N=sum(n), ratio=round(n/N, 2)) %>% 
+      filter(ratio==0) %>% pull(utterance)
+    data.observed <- data.observed %>% filter(!utterance %in% utts_low_freq)
+  }
   
   # observed ratios per context
   contexts <- data.behav$id %>% unique()
