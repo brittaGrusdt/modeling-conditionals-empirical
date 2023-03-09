@@ -41,7 +41,6 @@ params <- c(params, pars.observations, pars.likelihoods, pars.rsa_states)
 
 # Run Model ---------------------------------------------------------------
 # 1. predictions by contexts
-path_model_file = paste(params$dir_wppl_code, "model-single-run-by-contexts.wppl", sep=FS)
 params$packages <- c(params$packages, paste("webppl-model", "node_modules", 
                                             "dataHelpers", sep = FS))
 
@@ -60,7 +59,16 @@ params$theta <- 0.699
 # params$utt_cost <- df.p_utts %>% dplyr::select(-p) %>% 
 #   pivot_wider(names_from="Parameter", values_from="value")
 
-posterior <- run_webppl(path_model_file, params)
+model <- "var rsa_predictions = run_rsa_model(data)
+rsa_predictions
+"
+data <-   webppl(program_code = model,
+                 data = params,
+                 data_var = "data",
+                 random_seed = params$seed_webppl,
+                 packages = params$packages
+)
+posterior <- data %>% map(function(x){as_tibble(x)})
 model.predictions <- posterior %>% 
   map(function(x){as_tibble(x) %>% mutate(ll_ci = as.numeric(ll_ci))}) %>% 
   bind_rows() %>% group_by(id) %>% 

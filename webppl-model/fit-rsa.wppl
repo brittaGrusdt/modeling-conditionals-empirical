@@ -89,16 +89,16 @@ var non_normalized_posterior = function() {
 
   factor(summed_log_likelihood)
 
-  // I dont know why but if I return the object 'params' directly, I only
-  // get the latest value back ... so for 100 final samples, I get 100 values,
-  // but always the same even though when printing the sampled parameter values,
-  // these are different (as they should)
-
   query.add("utts", params.utt_cost)
   query.add("alpha", params.alpha)
   query.add("theta", params.theta)
   query.add("gamma", params.gamma)
   return(query)
+  
+  // I dont know why but if I return the object 'params' directly, I only
+  // get the latest value back ... so for 100 final samples, I get 100 values,
+  // but always the same even though when printing the sampled parameter values,
+  // these are different (as they should)
   // return({
   //   alpha: params.alpha,
   //   theta: params.theta,
