@@ -1,6 +1,42 @@
 library(ggpubr)
 names_data <- c(`behavioral` = "darkgreen", `model` = "firebrick")
 
+# model utterances --------------------------------------------------------
+utts.model.ifs = c("A > C", "A > -C", "-A > C", "-A > -C", 
+                   "C > A", "C > -A", "-C > A", "-C > -A")
+utts.model.literals = c("A", "-A", "C", "-C")
+utts.model.mights = c("might A", "might -A", "might C", "might -C")
+utts.model.conjs = c("C and A", "C and -A", "-C and A", "-C and -A")
+
+# context names -----------------------------------------------------------
+get_dep_context_expression = function(trial_id){
+  expr <- switch(trial_id,
+                "if1_hh" = c(expression("if"[1]*":HI"), "high"),
+                "if1_uh" = c(expression(paste(`if`[1], ":UI")),"unc"),
+                "if1_u-Lh" = c(expression("if"[1]*":U"^-{}*"I"), "uncl"),
+                "if1_lh" = c(expression("if"[1]*":LI"), "low"),
+                "if2_hl" = c(expression("if"[2]*":HL"), "high"),
+                "if2_ul" = c(expression("if"[2]*":UL"), "unc"),
+                "if2_u-Ll" = c(expression("if"[2]*":U"^-{}*"L"), "uncl"),
+                "if2_ll" = c(expression("if"[2]*":LL"), "low"))
+  return(expr)
+}
+
+names.ind_contexts = list("independent_hh" = "ind:HH", 
+                          "independent_ll" = "ind:LL", 
+                          "independent_uh" = "ind:UH", 
+                          "independent_ul" = "ind:UL", 
+                          "independent_hl" = "ind:HL")
+
+get_name_context = function(trial_id){
+  if(str_detect(trial_id, "independent")){
+    return(names.ind_contexts[[trial_id]])
+  } else{
+    return(get_dep_context_expression(trial_id))
+  }
+}
+
+# functions ---------------------------------------------------------------
 plot_correlation = function(results.joint, 
                             color = "utterance", shape = "relation",
                             label.x = 0.1, label.y = NA){

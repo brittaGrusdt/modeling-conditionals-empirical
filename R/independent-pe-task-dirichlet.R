@@ -21,14 +21,11 @@ library(boot)
 library(stringr)
 
 source(here("R", "helpers-dirichlet-regression.R"))
+source(here("R", "helpers-plotting.R"))
+
 # Setup -------------------------------------------------------------------
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
 prob_names <- c("blue"="P(b)", "green" = "P(g)")
-trial_names <- c("independent_hh" = "ind:HH", 
-                 "independent_ll" = "ind:LL", 
-                 "independent_uh" = "ind:UH", 
-                 "independent_ul" = "ind:UL", 
-                 "independent_hl" = "ind:HL")
 # Data --------------------------------------------------------------------
 active_config = "default_prior"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
@@ -226,8 +223,8 @@ names_priors = c("H"="high", "L"="low", "U"="unc")
 fn_pp_plots = function(trial_id){
   df.trial <- df.brms %>% filter(id == trial_id)
   N = nrow(df.trial)
-  pb = names_priors[[str_sub(trial_names[[trial_id]], -2, -2)]]
-  pg = names_priors[[str_sub(trial_names[[trial_id]], -1, -1)]]
+  pb = names_priors[[str_sub(get_name_context(trial_id), -2, -2)]]
+  pg = names_priors[[str_sub(get_name_context(trial_id), -1, -1)]]
   indices_b <- df_ind.brms$pblue == pb
   indices_g <- df_ind.brms$pgreen == pg
     
@@ -241,7 +238,7 @@ fn_pp_plots = function(trial_id){
   yrep_2d <- matrix(yrep, nrow=100, ncol=N*4)
   
   p <- ppc_dens_overlay_grouped(y=y_vec, yrep = yrep_2d, group = grp) +
-    labs(title = trial_names[[trial_id]])
+    labs(title = get_name_context(trial_id))
   
   fn <- paste("pp-tables-evs-posterior-", trial_id, ".png", sep="")
   target_path <- paste(target_dir, FS, fn, sep="")

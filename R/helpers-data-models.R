@@ -1,3 +1,6 @@
+library(here)
+source(here("R", "helpers-plotting.R"))
+
 plot_new_tables <- function(df.trial, samples.tbls, tit, target_path=NA){
   N = nrow(df.trial)
   grp <- rep(factor(c("bg", "b¬g", "¬bg", "¬b¬g"),
@@ -38,15 +41,7 @@ make_pp_plots_new_dependent_tables = function(df.dep, sampled_tables, trials,
                                               target_dir, fn_prefix){
   pp_plots_new_tables <- map(trials, function(trial_id){
     df.trial <- df.dep %>% filter(id == trial_id)
-    tit <- switch(trial_id,
-                  "if1_hh"=expression("if"[1]*":HI"),
-                  "if1_uh"=expression(paste(`if`[1], ":UI")),
-                  "if1_u-Lh"=expression("if"[1]*":U"^-{}*"I"),
-                  "if1_lh"=expression("if"[1]*":LI"),
-                  "if2_hl"=expression("if"[2]*":HL"),
-                  "if2_ul"=expression("if"[2]*":UL"),
-                  "if2_u-Ll"=expression("if"[2]*":U"^-{}*"L"),
-                  "if2_ll"=expression("if"[2]*":LL"))
+    tit <- get_name_context(trial_id)
     fn <- paste(fn_prefix, "_", trial_id, ".png", sep="")
     target_path <- paste(target_dir, FS, fn, sep="")
     df.samples <- sampled_tables %>% filter(id == trial_id)

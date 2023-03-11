@@ -21,6 +21,7 @@ library(boot)
 
 source(here("R", "helpers-dirichlet-regression.R"))
 source(here("R", "helpers-data-models.R"))
+source(here("R", "helpers-plotting.R"))
 # Setup -------------------------------------------------------------------
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
 
@@ -227,15 +228,7 @@ pp_samples <- posterior_predict(model_dep.pe_task)
 pp_plots <- map(df.brms %>% filter(relation!="independent") %>% pull(id) %>% unique(), 
                 function(trial_id){
   df.trial <- df.brms %>% filter(id == trial_id)
-  tit_pblue <- switch(trial_id,
-                "if1_hh" = c(expression("if"[1]*":HI"), "high"),
-                "if1_uh" = c(expression(paste(`if`[1], ":UI")),"unc"),
-                "if1_u-Lh" = c(expression("if"[1]*":U"^-{}*"I"), "uncl"),
-                "if1_lh" = c(expression("if"[1]*":LI"), "low"),
-                "if2_hl" = c(expression("if"[2]*":HL"), "high"),
-                "if2_ul" = c(expression("if"[2]*":UL"), "unc"),
-                "if2_u-Ll" = c(expression("if"[2]*":U"^-{}*"L"), "uncl"),
-                "if2_ll" = c(expression("if"[2]*":LL"), "low"))
+  tit_pblue <- get_name_context(trial_id)
   indices1 <- df_dep.brms$pblue == eval(tit_pblue[2])
   indices2 <- df_dep.brms$relation == substr(trial_id, 1, 3)
   N = nrow(df.trial)
