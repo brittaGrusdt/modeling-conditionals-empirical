@@ -36,6 +36,17 @@ get_name_context = function(trial_id){
   }
 }
 
+labels_dep_contexts <- c(
+  `if1_hh` = parse(text = expression("if"[1]*":HI")),
+  `if1_lh` = parse(text = expression("if"[1]*":LI")),
+  `if1_u-Lh` = parse(text = expression("if"[1]*":U"^-{}*"I")),
+  `if1_uh` = parse(text = expression("if"[1]*":UI")),
+  `if2_hl` = parse(text = expression("if"[2]*":HL")),
+  `if2_ll` = parse(text = expression("if"[2]*":LL")),
+  `if2_u-Ll` = parse(text = expression("if"[2]*":U"^-{}*"L")),
+  `if2_ul` = parse(text = expression("if"[2]*":UL"))
+) 
+
 # functions ---------------------------------------------------------------
 plot_correlation = function(results.joint, 
                             color = "utterance", shape = "relation",
