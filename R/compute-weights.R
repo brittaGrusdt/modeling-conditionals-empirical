@@ -33,11 +33,17 @@ ind_data_dir = paste(here(params$dir_results), "independent-contexts", "zoib-mod
 Sys.setenv(R_CONFIG_ACTIVE = "cleaned_data")
 params.data = config::get()
 
-# use special causal nets, with different marginal distributions than uniform
-# cns = create_causal_nets(params$p_noise, params$p_cp, params$p_ant,
-#                          params$rels_dep, params$p_a, params$p_c)
-# params$causal_nets_dep = cns$dep
-# params$causal_nets_ind = cns$ind
+################################################################################
+# use more fine-grained causal nets (causal power, noise: low/unc/high)
+active_config = "fine_grained_causal_nets"
+Sys.setenv(R_CONFIG_ACTIVE = active_config)
+pars.cns <- config::get()
+cns = create_causal_nets(pars.cns$dep_causal_power, pars.cns$dep_noise, 
+                         pars.cns$dep_marginal, params$rels_dep,
+                         pars.cns$ind_a, pars.cns$ind_c)
+params$causal_nets_dep = cns$dep
+params$causal_nets_ind = cns$ind
+################################################################################
 
 # behavioral data
 data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
@@ -71,7 +77,6 @@ prior <- webppl(program_file = here("webppl-model", "run-state-prior.wppl"),
                 packages = params$packages[1:2]) 
 states = prior$prior$support %>% as_tibble()
 params$prior_samples = states
-# params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
 
 # load likelihood parameters (for fitted data)
 pars_likelihoods <- get_likelihood_params_fitted_data(params)
@@ -102,16 +107,19 @@ save_data(weights %>% dplyr::select(id, bn_id, probs, prior_r),
                 sep=""))
 
 # analyze weights
-weights %>% group_by(prior_r, id) %>% summarize(n_states = n())
-weights %>% group_by(prior_r, id) %>% filter(cdf <= 0.99) %>%
-  summarize(n_states = n())
+weights %>% group_by(prior_r, id, probability) %>% summarize(n_states = n()) %>% 
+  mutate(N=sum(n_states), proportion = n_states/N)
+weights %>% group_by(prior_r, id, probability) %>% filter(cdf <= 0.99) %>%
+  summarize(n_states = n()) %>% 
+  mutate(N=sum(n_states), proportion = n_states/N)
 
 # relations
 weights.relations = weights %>% filter(prior_r == "uninformative") %>% 
-  group_by(id, r) %>% summarize(p = sum(probs), .groups = "drop_last") %>% 
+  group_by(id, r, probability) %>% 
+  summarize(p = sum(probs), .groups = "drop_last") %>% 
   arrange(id, desc(p)) %>% mutate(p = round(p, 2)) %>% 
   filter(p != 0)
-weights.relations %>% filter(id == "independent_ul")
+weights.relations %>% filter(id == "independent_ll")
 weights.relations %>% filter(startsWith(id, "if1"))
 weights.relations %>% filter(startsWith(id, "if2"))
 
@@ -142,8 +150,8 @@ plots.expected_states = map(data.joint$id %>% unique, function(id){
   p <- data.joint %>% 
     filter(id == !!id) %>% 
     ggplot(aes(x = cell, fill = data, color=data)) +
-    geom_bar(aes(y = ev_cell), stat = "identity", 
-             position = position_dodge()) + 
+    geom_bar(aes(y = ev_cell), stat = "identity",
+             position = position_dodge()) +
     facet_grid(prior_r~cell, scales = "free_x", 
                labeller=labeller(cell=cell_names)) +
     scale_color_manual(name = "data", values = colors) +
@@ -155,6 +163,36 @@ plots.expected_states = map(data.joint$id %>% unique, function(id){
 })
 plots.expected_states
 
+
+N_obs = params$observations %>% group_by(id) %>% dplyr::count() 
+N_rep = 100
+
+map(slider_ratings$id %>% unique(), function(id){
+  N = N_obs %>% filter(id == !!id) %>% pull(n)
+  W <- weights %>% filter(id==!!id & prior_r == "informative") %>% rowid_to_column()
+  
+  # sample N_rep times same number of states as participants in this trial/context
+  # and compute the expected value for each cell in each repetition
+  evs = map_dfr(seq(1, N_rep), function(i){
+    idx_states = sample(W$rowid, N, replace=T, prob=W$probs)
+    states = W[idx_states,] %>% dplyr::select(rowid, id, AC, `A-C`, `-AC`, `-A-C`)
+    expected.cells = states %>% 
+      pivot_longer(cols = c("AC", "A-C", "-AC", "-A-C"), names_to = "cell") %>% 
+      group_by(cell) %>%
+      summarize(ev_cell = mean(value), .groups = "drop_last") %>% 
+      add_column(rep = i)
+    return(expected.cells)
+  })
+  p <- slider_ratings %>% filter(id==!!id) %>% 
+    ggplot() + 
+    geom_boxplot(aes(x=cell, y=value)) +
+    geom_boxplot(data=evs, aes(x=cell, y=ev_cell), color='firebrick') +
+    stat_summary(aes(x=cell, y=value), fun=mean, geom="point", shape=4, size=5) +
+    # geom_point(data = expected.states %>% filter(id==!!id), 
+    #            aes(x=cell, y=ev_cell, color=prior_r), shape=4, stroke=2) +
+    ggtitle(get_name_context(id))
+  return(p)
+})
 
 
 

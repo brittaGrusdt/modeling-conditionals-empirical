@@ -26,7 +26,7 @@ default:
   gamma: 1
   theta: 0.7
   theta_might: 0
-  n_forward_samples: 100
+  n_forward_samples: 1000
   verbose: true
   causal_nets_dep: !expr c("A implies C_unif-high-low",
                            "C implies A_unif-high-low", 
@@ -53,7 +53,15 @@ default:
   fn_likelihoods: "mean-posteriors-and-diagnostics.rds"
   speaker_type: 'pragmatic'
   utt_cost: 0
+  use_drift_kernel: TRUE
 
+fine_grained_causal_nets:
+  dep_causal_power: !expr c("high", "low", "unc")
+  dep_noise: !expr c("high", "low", "unc")
+  dep_marginal: !expr c("unif")
+  ind_a: !expr c("unif")
+  ind_c: !expr c("unif")
+  
 cleaned_data:
   fn_tbls_empiric_pids: "tables-empiric-pids.rds"
   fn_tables_smooth: "pe_tables_smooth.csv"
