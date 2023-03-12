@@ -14,13 +14,13 @@ var params = {
 }
 setParams(params)
 // just for debugging
-var invalid_utts_states = check_states_utts(
-  ALL_BNS,
-  _.map(globalStore.utterances, 'utt'),
-  globalStore.thresholds,
-  params,
-  true
-)
+// var invalid_utts_states = check_states_utts(
+//   ALL_BNS,
+//   _.map(globalStore.utterances, 'utt'),
+//   globalStore.thresholds,
+//   params,
+//   true
+// )
 
 if(data["verbose"][0]) {
   display("free parameters:")
