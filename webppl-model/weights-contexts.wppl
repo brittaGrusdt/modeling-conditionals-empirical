@@ -29,11 +29,6 @@ if(data["verbose"][0]) {
   display("theta: " + globalStore.thresholds.theta)
   display("theta_might: " + globalStore.thresholds.theta_might)
   // display('vs_utts' + globalStore.utterances)
-  display('informativeness utterance types:')
-  display("# conjunctions: " + globalStore.states_conjunction.length)
-  display("# literals: " + globalStore.states_literal.length)
-  display("# conditionals: " + globalStore.states_conditional.length)
-  display("# mights: " + globalStore.states_might.length)
 }
 // get Bayes nets used for predictions for each trial + participant
 // we sample a certain number of Bayes nets per relation
