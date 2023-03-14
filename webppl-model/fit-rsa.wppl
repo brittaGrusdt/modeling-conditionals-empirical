@@ -60,7 +60,6 @@ var non_normalized_posterior = function() {
   // predictions 4 (close to) certain worlds
   var predictions_certain_worlds_list = map(function(bn){
     return([bn.w, rsa_speaker_predictions[bn.bn_id]])
-    //return({w: bn.w, prediction: rsa_speaker_predictions[bn.bn_id]})
   }, BNS_CERTAIN_WORLD)
   var predictions_certain_worlds = Object.fromEntries(predictions_certain_worlds_list)
   var speaker_predictions = predictions_with_gamma(rsa_speaker_predictions,
@@ -73,12 +72,49 @@ var non_normalized_posterior = function() {
     }, observed_counts)
 
     var Weights = posterior_states_contexts[context]
+    ////////////compute model prediction based on repeated set of draws from weights /////////////
+    // var n_rep = 100
+    // var results_ci = reduce(function(i_rep, acc){
+    //   var n_ci = sum(_.map(observed_ci, 'n'))
+    //   var states = repeat(n_ci, function(){return(sample(Weights))})
+    //   var states_ids = _.map(states, 'bn_id')
+    //   var counts = _.countBy(states_ids) // but a state can be sampled more than once
+    //   // summarize bn_ids so that each bn_id occurs once and probabilities summed up accoordingly
+    //   // necessary for get_weighted_rsa_prediction - function!
+    //   var states_to_probs = Object.fromEntries(
+    //     map(function(id_occ){
+    //       var p = (1 / states_ids.length) * id_occ[1]
+    //       var id = id_occ[0]
+    //       return([id, p])
+    //     }, Object.entries(counts))
+    //   )
+    //   var model_prediction = get_weighted_rsa_prediction(
+    //     speaker_predictions, Object.keys(states_to_probs), Object.values(states_to_probs)
+    //   )
+    //   var result = Object.fromEntries(zip(model_prediction.params.vs,
+    //                                       model_prediction.params.ps))
+    //   return(acc.concat(result))
+    // }, [], _.range(0, n_rep))
+    // //display(results_ci)
+    //
+    // var avg_predictions = Object.fromEntries(map(function(u){
+    //     var predictions_u = _.map(results_ci, u)
+    //     var avg_p = sum(predictions_u) / predictions_u.length
+    //     return([u, avg_p])
+    //   }, _.map(globalStore.utterances, 'utt'))
+    // )
+    // //display(avg_predictions)
+    // var model_prediction = Categorical({
+    //   vs: Object.keys(avg_predictions),
+    //   ps: Object.values(avg_predictions)
+    // })
+    // display(model_prediction)
+   ////////////////////////////////
     var pars_weights = Object.values(Weights.params)
     var p_states = pars_weights[1]
     var states_ids = _.map(pars_weights[0], 'bn_id')
-
     var model_prediction = get_weighted_rsa_prediction(
-      speaker_predictions,states_ids, p_states
+      speaker_predictions, states_ids, p_states
     )
     var ll = get_log_likelihood_by_context(observed_ci, model_prediction)
     return(ll)
@@ -94,7 +130,7 @@ var non_normalized_posterior = function() {
   query.add("theta", params.theta)
   query.add("gamma", params.gamma)
   return(query)
-  
+
   // I dont know why but if I return the object 'params' directly, I only
   // get the latest value back ... so for 100 final samples, I get 100 values,
   // but always the same even though when printing the sampled parameter values,
