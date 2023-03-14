@@ -19,6 +19,19 @@ params <- config::get()
 if(!dir.exists(params$dir_results)) dir.create(params$dir_results, recursive = T)
 result_dir = params$dir_results
 
+################################################################################
+# use more fine-grained causal nets (causal power, noise: low/unc/high)
+active_config = "fine_grained_causal_nets"
+Sys.setenv(R_CONFIG_ACTIVE = active_config)
+pars.cns <- config::get()
+cns = create_causal_nets(pars.cns$dep_causal_power, pars.cns$dep_noise, 
+                         pars.cns$dep_marginal, params$rels_dep,
+                         pars.cns$ind_a, pars.cns$ind_c)
+# dont allow causal power to be lower category than noise
+params$causal_nets_dep = cns$dep[!str_detect(cns$dep, "-low-") &
+                                   !str_detect(cns$dep, "-unc-high")]
+params$causal_nets_ind = cns$ind
+################################################################################
 # behavioral data
 data.behav <- read_csv(here(params$dir_data, params$fn_cleaned_data)) %>% 
   dplyr::select(prolific_id, id, utt.standardized, uc_task, pe_task, slider) %>% 
@@ -35,18 +48,18 @@ pars.likelihoods <- get_likelihood_params_fitted_data(params)
 # if not provided, all utterances equally likely
 # params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
 
-weights <- readRDS(
-  here(params$dir_results,
-       paste("weights_ci_", params$n_forward_samples, ".rds", sep=""))
-) %>% filter(prior_r == "informative")
-
-p_s_ci = list(p_s_ci = left_join(weights, pars.rsa_states$prior_samples, by="bn_id"))
+# add precomputed weights and rsa-states
+weights <- readRDS(here(params$dir_results, "weights_ci.rds")) %>%
+  filter(prior_r == "informative")
+p_s_ci = list(p_s_ci = left_join(
+  weights %>% dplyr::select(-cn, -n_rsa_states), 
+  pars.rsa_states$prior_samples, by="bn_id")
+)
 
 Sys.setenv(R_CONFIG_ACTIVE = "priors_relations")
-params$prior_relations <- config::get()[["informative"]]
+params$prior_relations <- config::get()[["uninformative"]]
 
 params <- c(params, pars.observations, pars.likelihoods, pars.rsa_states, p_s_ci)
-params$par_fit <- c("alpha", "theta", "utt_cost") #, "gamma")
 params$packages <- c(params$packages, 
                      paste("webppl-model", "node_modules", "dataHelpers", sep = FS))
 # set to utterance cost
@@ -54,7 +67,7 @@ params$packages <- c(params$packages,
 #   filter(!Parameter %in% c("alpha", "theta")) %>% 
 #   pivot_wider(names_from = "Parameter", values_from = "value")
 
-mcmc_params <- tibble(n_samples = 10000, n_burn = 0, n_lag = 5, n_chains = 4)
+mcmc_params <- tibble(n_samples = 1000, n_burn = 500, n_lag = 3, n_chains = 4)
 posterior <- webppl(program_file = here("webppl-model", "fit-rsa.wppl"), 
                     data_var = "data",
                     model_var = "non_normalized_posterior",
@@ -151,11 +164,6 @@ posterior_samples %>% filter(Parameter %in% c("alpha", "theta")) %>%
   pivot_wider(names_from="Parameter", values_from = "value") %>% 
   ggplot(aes(x=alpha, y=theta, color = Chain)) +
   geom_point()
-
-
-
-
-
 
 
 
