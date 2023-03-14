@@ -26,7 +26,7 @@ default:
   gamma: 1
   theta: 0.7
   theta_might: 0
-  n_forward_samples: 1000
+  n_forward_samples: 500
   verbose: true
   causal_nets_dep: !expr c("A implies C_unif-high-low",
                            "C implies A_unif-high-low", 
@@ -51,9 +51,10 @@ default:
   dir_dep_likelihoods: !expr paste("results", "default-prior", "dependent-contexts", "zoib-model", sep=.Platform$file.sep)
   dir_ind_likelihoods: !expr paste("results", "default-prior", "independent-contexts", "zoib-model", sep=.Platform$file.sep)
   fn_likelihoods: "mean-posteriors-and-diagnostics.rds"
-  speaker_type: 'pragmatic'
+  speaker_type: 'pragmatic_utt_type'
   utt_cost: 0
   use_drift_kernel: TRUE
+  par_fit: !expr c("alpha", "theta") # , "utt_cost", "gamma"
 
 fine_grained_causal_nets:
   dep_causal_power: !expr c("high", "low", "unc")
