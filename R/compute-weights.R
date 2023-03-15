@@ -89,7 +89,7 @@ tables.model <- states %>%
   pivot_wider(names_from = "table.support", values_from = "table.probs") %>%
   get_assertable_utterances()
   
-theta = 0.80 
+theta = 0.894
 # when theta<=0.5 there are no empiric tables in independent contexts where only
 # conditionals (and might) are assertable
 utts.assertable = tables.model %>% 
@@ -121,24 +121,25 @@ bn_ids.only_might_or_if = utts.assertable %>%
 
 # for pe-task data: check utterance assertable in original PE-task tables
 # tables.empiric <- data.observed %>%
-#   dplyr::select(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`) %>%
-#   get_assertable_utterances()
-# utts.assertable = tables.empiric %>% 
-#   mutate(u_assertable = case_when(str_detect(utt, "might") ~ T, 
-#                                   prob >= theta ~ T, T ~ F)) %>% 
+#   dplyr::select(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`, utterance) %>%
+#   rename(uc_task = utterance) %>% 
+#   get_assertable_utterances() 
+# utts.assertable = tables.empiric %>%
+#   mutate(u_assertable = case_when(str_detect(utt, "might") ~ T,
+#                                   prob >= theta ~ T, T ~ F)) %>%
 #   filter(u_assertable)
-# tbls.empiric.only_might_or_if <- utts.assertable %>% 
-#   mutate(might = utt %in% standardized.might) %>% 
+# tbls.empiric.only_might_or_if <- utts.assertable %>%
+#   mutate(might = utt %in% standardized.might) %>%
 #   mutate(might_or_if = utt %in% standardized.might | utt %in% standardized.ifs) %>%
-#   group_by(prolific_id, id) %>% 
-#   mutate(s.might_or_if = sum(might_or_if), 
-#          s.might = sum(might), 
-#          n = n(), 
-#          only.might = s.might == n, 
+#   group_by(prolific_id, id) %>%
+#   mutate(s.might_or_if = sum(might_or_if),
+#          s.might = sum(might),
+#          n = n(),
+#          only.might = s.might == n,
 #          only.might_or_if = s.might_or_if == n) %>%
-#   group_by(id, only.might_or_if) %>% dplyr::count() %>% arrange(desc(n)) %>% 
-#   group_by(id) %>% mutate(proportion = n / sum(n)) %>% 
-#   filter(str_detect(id, "independent")) %>% arrange(id, proportion) %>% 
+#   group_by(id, only.might_or_if) %>% dplyr::count() %>% arrange(desc(n)) %>%
+#   group_by(id) %>% mutate(proportion = n / sum(n)) %>%
+#   filter(str_detect(id, "independent")) %>% arrange(id, proportion) %>%
 #   filter(only.might_or_if)
 # tbls.empiric.only_might_or_if
 ###############################################################################

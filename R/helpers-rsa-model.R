@@ -2,7 +2,7 @@ get_assertable_utterances = function(tbls.wide){
   tbls.wide %>% 
     rename(bg = AC, b = `A-C`, g = `-AC`, none = `-A-C`) %>% 
     add_probs() %>% 
-    rename(p_AC = bg, `p_A-C` = b, `p_-AC` = g, `p_-A-C` = none) %>% 
+    mutate(p_AC = bg, `p_A-C` = b, `p_-AC` = g, `p_-A-C` = none) %>% 
     pivot_longer(starts_with("p_"), names_to = "utt", values_to = "prob") %>% 
     mutate(utt = case_when(utt == "p_AC" ~ standardized.sentences$bg, 
                            utt == "p_A-C" ~ standardized.sentences$b, 

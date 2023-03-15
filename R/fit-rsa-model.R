@@ -5,6 +5,7 @@ library(tibble)
 library(ExpDataWrangling)
 library(ModelUtils)
 library(stringr)
+library(ggdist)
 
 source(here("R", "helpers-plotting.R"))
 source(here("R", "helpers-load-data.R"))
@@ -67,12 +68,12 @@ params$packages <- c(params$packages,
 #   filter(!Parameter %in% c("alpha", "theta")) %>% 
 #   pivot_wider(names_from = "Parameter", values_from = "value")
 
-mcmc_params <- tibble(n_samples = 1000, n_burn = 500, n_lag = 3, n_chains = 4)
+mcmc_params <- tibble(n_samples = 2500, n_burn = 2500, n_lag = 3, n_chains = 4)
 posterior <- webppl(program_file = here("webppl-model", "fit-rsa.wppl"), 
                     data_var = "data",
                     model_var = "non_normalized_posterior",
                     data = params,
-                    inference_opts = list(method = "MCMC",
+                    inference_opts = list(method = "incrementalMH",
                                           samples = mcmc_params$n_samples,
                                           burn = mcmc_params$n_burn,
                                           lag = mcmc_params$n_lag,
@@ -87,7 +88,7 @@ posterior_samples <- posterior %>% unnest(c(value)) %>%
   add_column(mcmc = list(mcmc_params), n_forward_samples = params$n_forward_samples)
 
 fn <- str_flatten(params$par_fit, collapse = "_")
-save_data(posterior, 
+save_data(posterior_samples, 
           here(params$dir_results, 
                paste("mcmc-posterior-fit-context-predictions-", fn, ".rds", sep="")
                ))
@@ -100,6 +101,31 @@ p_chain = posterior_samples %>%
   facet_wrap(~Parameter, scales = "free", labeller = label_both, ncol = 3) 
 p_chain
 ggsave(here(params$dir_results, paste("chain_", fn, ".png", sep="")), p_chain)
+
+# plot posterior densities
+p.density_posterior = posterior_samples %>% 
+  filter(Parameter %in% c("alpha", "theta")) %>% 
+  mutate(Chain = as.factor(Chain)) %>% 
+  ggplot(aes(x=value, color = Chain)) +
+  geom_density() + 
+  facet_wrap(~Parameter, scales = "free", labeller = label_both, ncol = 4) 
+p.density_posterior
+# posterior with highest density intervals
+p.posterior_alpha_theta = posterior_samples %>% 
+  filter(Parameter %in% c("alpha", "theta")) %>% 
+  ggplot(aes(x = value, fill = Parameter)) +
+  stat_halfeye(.width = c(0.95), point_interval = "median_hdi") +
+  facet_wrap(~Parameter, labeller = label_parsed, scales = "free") +
+  theme(legend.position = "none") +
+  labs(x="posterior value", y = "density")
+ggsave(here(params$dir_results, paste("density_posterior_", fn, ".png", sep="")),
+       p.posterior_alpha_theta)
+
+# expected values
+params_evs <- posterior_samples %>% group_by(Parameter) %>% 
+  summarize(value = mean(value), .groups = "drop_last") %>%
+  mutate(Parameter=str_replace(Parameter, "utts.", ""))
+params_evs %>% pivot_wider(names_from = "Parameter", values_from = "value") 
 
 
 # utterance prior probabilities (cost)
@@ -121,24 +147,12 @@ posterior_utts %>%
   geom_density() + 
   facet_wrap(~Parameter, scales = "free_y", labeller = label_value, ncol = 4) 
 
-
-# expected values
-params_evs <- posterior_samples %>% group_by(Parameter) %>% 
-  filter(Iteration >= 1000 & Chain == 3) %>% 
-  summarize(value = mean(value), .groups = "drop_last") %>%
-  mutate(Parameter=str_replace(Parameter, "utts.", ""))
-params_evs
-
 # softmax utt cost
 softmax <- function(vec,i){return(exp(vec[i])/sum(exp(vec)))}
 costs <- params_evs %>% filter(!Parameter %in% c("alpha", "theta", "gamma")) %>%
   mutate(value = -1 * value) %>% pull(value)
 df.p_utts = params_evs %>% filter(!Parameter %in% c("alpha", "theta", "gamma")) %>% 
   add_column(p = softmax(costs)) %>% arrange(desc(p))
-
-params_evs %>% pivot_wider(names_from = "Parameter", values_from = "value") 
-
-
 
 posterior_utts %>% group_by(Chain, Parameter) %>% 
   summarize(mean = mean(value)) %>%
@@ -149,14 +163,6 @@ posterior_utts %>%
   ggplot(aes(x=Iteration, y = value, color = Chain)) +
   geom_line() + 
   facet_wrap(~Parameter, scales = "free", labeller = label_value, ncol = 5) 
-
-
-# plot posterior densities
-posterior_samples %>% filter(Parameter %in% c("alpha", "theta")) %>% 
-  mutate(Chain = as.factor(Chain)) %>% 
-  ggplot(aes(x=value, color = Chain)) +
-  geom_density() + 
-  facet_wrap(Parameter~Chain, scales = "free", labeller = label_both, ncol = 4) 
 
 # alpha vs. theta
 posterior_samples %>% filter(Parameter %in% c("alpha", "theta")) %>% 

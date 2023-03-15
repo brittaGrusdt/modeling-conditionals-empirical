@@ -311,6 +311,7 @@ df.means_pe_utts.by_rel %>% filter(utt_type == "literal") %>%
   filter(!(utt.standardized == "green falls" & relation == "if2")) %>% 
   pull(mean_pe) %>% min()
 
+# mean estimate in pe-task for a single selected utterance
 get_mean_estimates = function(data, i){
   d2 <- data[i,]
   return(mean(d2$pe_selected_utt))
@@ -354,6 +355,30 @@ p.pe_means_pe_utts
 ggsave(paste(plot_dir, "pe_means_pe_utts.png", sep = FS), p.pe_means_pe_utts,
        width = 14, height = 8)
 
+# bootstrapped utterance ratios for each context
+get_mean_uc_ratios = function(data, i, utt){
+  d2 <- data[i,]
+  return(mean(d2$utt.standardized == utt))
+}
+N = 1000
+bootstrapped_uc_ratios_ci = group_map(
+  pe_uc_data %>% mutate(id = str_replace(id, "ind", "independent")) %>% 
+    dplyr::select(prolific_id, id, utt.standardized) %>%  group_by(id), 
+  function(df.id, grp.id){
+    message(grp.id$id)
+    df <- group_map(df.id %>% group_by(utt.standardized), function(df.utt, grp.utt){
+      samples <- boot(df.id, statistic = get_mean_uc_ratios, R=N, 
+                      utt=grp.utt$utt.standardized)$t %>% sort()
+      tibble(x_hat = list(samples), 
+             estimate = mean(samples),
+             lower = samples[round(0.025*N)], 
+             upper = samples[round(0.975*N)],
+             id = grp.id$id, utt.standardized = grp.utt$utt.standardized)
+    }) %>% bind_rows()
+    return(df)
+  }) %>% bind_rows() 
+save_data(bootstrapped_uc_ratios_ci, here(params$dir_data, 
+                                        "bootstrapped_uc_ratios_ci.rds"))
 
 # estimated P(blue) vs. P(green) when conditional selected ----------------
 df.utt_freq_by_rel = data.uc %>% ungroup() %>% 
