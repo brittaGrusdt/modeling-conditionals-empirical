@@ -1,4 +1,4 @@
-globalStore.n_prior_samples = data["n_forward_samples"][0]
+globalStore.n_prior_samples = data["nb_rsa_states"][0]
 
 var name = data["name"][0]
 

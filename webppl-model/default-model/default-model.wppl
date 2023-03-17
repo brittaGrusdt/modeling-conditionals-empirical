@@ -1,7 +1,7 @@
 // Parameters
 // states + utterances
 globalStore.utterances = data["utterances"]
-globalStore.n_prior_samples = data["n_forward_samples"][0]
+globalStore.n_prior_samples = data["nb_rsa_states"][0]
 globalStore.alpha = data["alpha"][0]
 globalStore.cost = {
   conditional: data["cost_conditional"][0],
@@ -56,7 +56,7 @@ var run_speaker = function(bns){
 
 // RUN MODEL
 if(LEVEL_MAX == "speaker" || LEVEL_MAX == "speaker_lit"){
-  var n_samples = data["n_forward_samples"][0]
+  var n_samples = data["nb_rsa_states"][0]
   // define set of input states for speaker
   // 1. draw n_samples from prior or
   // 2. compute predictions just for given set of bn_ids or

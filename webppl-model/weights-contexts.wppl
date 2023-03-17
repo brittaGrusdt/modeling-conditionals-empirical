@@ -6,13 +6,12 @@ var contexts = _.uniq(_.map(par_zoibs, 'id')).concat(
   _.uniq(_.map(par_gaussian, 'id'))
 )
 
-var params = {
-  alpha: data.alpha,
-  gamma: data.gamma,
-  theta: data.theta,
-  p_utts: data.p_utts
-}
-setParams(params)
+// var params = {
+//   alpha: data.alpha,
+//   gamma: data.gamma,
+//   theta: data.theta
+// }
+setParams({})
 // just for debugging
 // var invalid_utts_states = check_states_utts(
 //   ALL_BNS,

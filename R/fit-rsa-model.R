@@ -9,67 +9,31 @@ library(ggdist)
 
 source(here("R", "helpers-plotting.R"))
 source(here("R", "helpers-load-data.R"))
+source(here("R", "helpers-rsa-model.R"))
 theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 
 # Setup -------------------------------------------------------------------
-# Priors
-active_config = "default_prior"
-Sys.setenv(R_CONFIG_ACTIVE = active_config)
-
-params <- config::get()
-if(!dir.exists(params$dir_results)) dir.create(params$dir_results, recursive = T)
-result_dir = params$dir_results
-
-################################################################################
-# use more fine-grained causal nets (causal power, noise: low/unc/high)
-active_config = "fine_grained_causal_nets"
-Sys.setenv(R_CONFIG_ACTIVE = active_config)
-pars.cns <- config::get()
-cns = create_causal_nets(pars.cns$dep_causal_power, pars.cns$dep_noise, 
-                         pars.cns$dep_marginal, params$rels_dep,
-                         pars.cns$ind_a, pars.cns$ind_c)
-# dont allow causal power to be lower category than noise
-params$causal_nets_dep = cns$dep[!str_detect(cns$dep, "-low-") &
-                                   !str_detect(cns$dep, "-unc-high")]
-params$causal_nets_ind = cns$ind
-################################################################################
-# behavioral data
-data.behav <- read_csv(here(params$dir_data, params$fn_cleaned_data)) %>% 
-  dplyr::select(prolific_id, id, utt.standardized, uc_task, pe_task, slider) %>% 
-  translate_standardized2model() 
-
-# add parameters to run webppl model
-# observed data each participant and trial + ratios
-pars.observations <- get_observed_data(data.behav, params, cutoff=F)
-
-# draw samples from prior
-pars.rsa_states <- get_rsa_states(params)
-# load likelihood parameters fitted to data
-pars.likelihoods <- get_likelihood_params_fitted_data(params)
-# if not provided, all utterances equally likely
-# params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
-
+config_cns = "fine_grained_cns"
+extra_packages = c("dataHelpers")
+config_weights_relations = "semi_informative"
+config_fits <- "rsa_fit_params"
+params <- prepare_data_for_wppl(config_cns, config_weights_relations,
+                                config_fits = config_fits,
+                                extra_packages = extra_packages)
 # add precomputed weights and rsa-states
-weights <- readRDS(here(params$dir_results, "weights_ci.rds")) %>%
-  filter(prior_r == "informative")
-p_s_ci = list(p_s_ci = left_join(
-  weights %>% dplyr::select(-cn, -n_rsa_states), 
-  pars.rsa_states$prior_samples, by="bn_id")
+weights <- readRDS(
+  paste(params$dir_results, FS,
+        "weights_ci_", config_weights_relations, params$nb_rsa_states, ".rds", 
+        sep="")
 )
-
-Sys.setenv(R_CONFIG_ACTIVE = "priors_relations")
-params$prior_relations <- config::get()[["uninformative"]]
-
-params <- c(params, pars.observations, pars.likelihoods, pars.rsa_states, p_s_ci)
-params$packages <- c(params$packages, 
-                     paste("webppl-model", "node_modules", "dataHelpers", sep = FS))
-# set to utterance cost
-# params$utt_cost <- params_evs %>% 
-#   filter(!Parameter %in% c("alpha", "theta")) %>% 
-#   pivot_wider(names_from = "Parameter", values_from = "value")
+p_s_ci = left_join(
+  weights %>% dplyr::select(-cn, -n_rsa_states), 
+  params$prior_samples
+)
+params$p_s_ci <- p_s_ci
 
 mcmc_params <- tibble(n_samples = 2500, n_burn = 2500, n_lag = 3, n_chains = 4)
-posterior <- webppl(program_file = here("webppl-model", "fit-rsa.wppl"), 
+posterior <- webppl(program_file = params$wppl_fit_rsa, 
                     data_var = "data",
                     model_var = "non_normalized_posterior",
                     data = params,
@@ -85,7 +49,7 @@ posterior <- webppl(program_file = here("webppl-model", "fit-rsa.wppl"),
 
 posterior_samples <- posterior %>% unnest(c(value)) %>% 
   mutate(Chain = as.factor(Chain)) %>% 
-  add_column(mcmc = list(mcmc_params), n_forward_samples = params$n_forward_samples)
+  add_column(mcmc = list(mcmc_params), nb_rsa_states = params$nb_rsa_states)
 
 fn <- str_flatten(params$par_fit, collapse = "_")
 save_data(posterior_samples, 
@@ -118,6 +82,7 @@ p.posterior_alpha_theta = posterior_samples %>%
   facet_wrap(~Parameter, labeller = label_parsed, scales = "free") +
   theme(legend.position = "none") +
   labs(x="posterior value", y = "density")
+p.posterior_alpha_theta
 ggsave(here(params$dir_results, paste("density_posterior_", fn, ".png", sep="")),
        p.posterior_alpha_theta)
 

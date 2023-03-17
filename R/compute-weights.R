@@ -19,86 +19,30 @@ cell_names <- c(
 )
 colors <- c(`empirical slider ratings` = "darkgreen", `model states` = "firebrick")
 # Setup -------------------------------------------------------------------
-# Priors
-active_config = "default_prior"
-Sys.setenv(R_CONFIG_ACTIVE = active_config)
+config_cns = "fine_grained_cns"
+extra_packages = c("dataHelpers")
+config_weights_relations = "semi_informative"
+params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
+                                extra_packages = extra_packages)
 
-params <- config::get()
-if(!dir.exists(params$dir_results)) dir.create(params$dir_results, recursive = T)
-result_dir = params$dir_results
-
-dep_data_dir = paste(here(params$dir_results), "dependent-contexts", "zoib-model", sep=FS)
-ind_data_dir = paste(here(params$dir_results), "independent-contexts", "zoib-model", sep=FS)
-
-# Data
-Sys.setenv(R_CONFIG_ACTIVE = "cleaned_data")
-params.data = config::get()
-
-################################################################################
-# use more fine-grained causal nets (causal power, noise: low/unc/high)
-active_config = "fine_grained_causal_nets"
-Sys.setenv(R_CONFIG_ACTIVE = active_config)
-pars.cns <- config::get()
-cns = create_causal_nets(pars.cns$dep_causal_power, pars.cns$dep_noise, 
-                         pars.cns$dep_marginal, params$rels_dep,
-                         pars.cns$ind_a, pars.cns$ind_c)
-# dont allow causal power to be lower category than noise
-params$causal_nets_dep = cns$dep[!str_detect(cns$dep, "-low-") &
-                                   !str_detect(cns$dep, "-unc-high")]
-params$causal_nets_ind = cns$ind
-################################################################################
-# behavioral data
-data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
-  dplyr::select(prolific_id, id, utt.standardized, uc_task, pe_task, slider) %>% 
-  translate_standardized2model() 
-
-data.uc = data.behav %>%  filter(!is.na(uc_task)) %>% 
-  dplyr::select(prolific_id, id, utterance) %>% 
-  add_column(n = 1) %>% group_by(id, utterance)
-data.pe = data.behav %>% 
-  dplyr::select(prolific_id, id, utt.standardized, pe_task) %>% 
-  pivot_wider(names_from = "utt.standardized", values_from = "pe_task") %>% 
-  rename(AC = `both blocks fall`, 
-         `A-C` = `blue falls but green does not fall`, 
-         `-AC` = `green falls but blue does not fall`, 
-         `-A-C` = `neither block falls`)
-
-slider_ratings = data.pe %>% 
+slider_ratings = params$observations %>% ungroup() %>% 
   dplyr::select(id, prolific_id, AC, `A-C`, `-AC`, `-A-C`) %>% 
   pivot_longer(cols = c("AC", "A-C", "-AC", "-A-C"), 
                names_to = "cell", values_to = "value")
 
-data.observed = left_join(data.uc, data.pe)
-params$observations = data.observed
-
-# draw samples from prior
-prior <- webppl(program_file = here("webppl-model", "run-state-prior.wppl"),
-                data_var = "data",
-                data = params,
-                random_seed = params$seed_webppl,
-                packages = params$packages[1:2]) 
-states = prior$prior$support %>% as_tibble()
-params$prior_samples = states
-
 ###############################################################################
-# analyze rsa-states
-tables.model <- states %>%
+# analyze RSA-states
+theta = 0.894
+utts.assertable <- params$prior_samples %>%
   dplyr::select(bn_id, r, probability, table.probs, table.support) %>%
   unnest(c(table.probs, table.support)) %>%
   group_by(bn_id) %>%
   pivot_wider(names_from = "table.support", values_from = "table.probs") %>%
-  get_assertable_utterances()
+  get_assertable_utterances(theta)
   
-theta = 0.894
-# when theta<=0.5 there are no empiric tables in independent contexts where only
-# conditionals (and might) are assertable
-utts.assertable = tables.model %>% 
-  mutate(u_assertable = case_when(str_detect(utt, "might") ~ T, 
-                                  prob >= theta ~ T, T ~ F)) %>% 
-  filter(u_assertable)
-
+# how often is each utterance assertable (in how many states)?
 utts.assertable %>% group_by(utt) %>% dplyr::count() %>% arrange(desc(n)) %>% 
-  ungroup() %>% mutate(proportion = round(n / sum(n), 2))
+  ungroup() %>% mutate(proportion = round(n / params$nb_rsa_states , 2))
 
 # given only states where r = A || C (independence), given these states
 # the conditional `if blue, green` is equally informative as `green`, 
@@ -107,7 +51,7 @@ utts.assertable %>% group_by(utt) %>% dplyr::count() %>% arrange(desc(n)) %>%
 
 # no literal assertable (-> no conjunction either, only 
 # possibly a conditional and might)
-bn_ids.only_might_or_if = utts.assertable %>% 
+bn_ids.only_might_and_if = utts.assertable %>% 
   mutate(might = utt %in% standardized.might) %>% 
   mutate(might_or_if = utt %in% standardized.might | utt %in% standardized.ifs) %>%
   group_by(bn_id) %>%
@@ -116,48 +60,39 @@ bn_ids.only_might_or_if = utts.assertable %>%
          n = n(), 
          only.might = s.might == n, 
          only.might_or_if = s.might_or_if == n) %>%
-  filter(only.might_or_if) %>%
+  filter(only.might_or_if & !only.might) %>%
   pull(bn_id) %>% unique()
 
-# for pe-task data: check utterance assertable in original PE-task tables
-# tables.empiric <- data.observed %>%
-#   dplyr::select(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`, utterance) %>%
-#   rename(uc_task = utterance) %>% 
-#   get_assertable_utterances() 
-# utts.assertable = tables.empiric %>%
-#   mutate(u_assertable = case_when(str_detect(utt, "might") ~ T,
-#                                   prob >= theta ~ T, T ~ F)) %>%
-#   filter(u_assertable)
-# tbls.empiric.only_might_or_if <- utts.assertable %>%
-#   mutate(might = utt %in% standardized.might) %>%
-#   mutate(might_or_if = utt %in% standardized.might | utt %in% standardized.ifs) %>%
-#   group_by(prolific_id, id) %>%
-#   mutate(s.might_or_if = sum(might_or_if),
-#          s.might = sum(might),
-#          n = n(),
-#          only.might = s.might == n,
-#          only.might_or_if = s.might_or_if == n) %>%
-#   group_by(id, only.might_or_if) %>% dplyr::count() %>% arrange(desc(n)) %>%
-#   group_by(id) %>% mutate(proportion = n / sum(n)) %>%
-#   filter(str_detect(id, "independent")) %>% arrange(id, proportion) %>%
-#   filter(only.might_or_if)
-# tbls.empiric.only_might_or_if
+# analyze assertable utterances PE-task data
+# for PE-task data: check utterance assertable in original PE-task tables
+utts.assertable.emp <- params$observations %>%
+  dplyr::select(prolific_id, id, AC, `A-C`, `-AC`, `-A-C`, utterance) %>%
+  rename(uc_task = utterance) %>%
+  get_assertable_utterances(theta)
+tbls.empiric.only_might_or_if <- utts.assertable.emp %>%
+  mutate(might = utt %in% standardized.might) %>%
+  mutate(might_or_if = utt %in% standardized.might | utt %in% standardized.ifs) %>%
+  group_by(prolific_id, id) %>%
+  mutate(s.might_or_if = sum(might_or_if),
+         s.might = sum(might),
+         n = n(),
+         only.might = s.might == n,
+         only.might_or_if = s.might_or_if == n) %>%
+  group_by(id, only.might_or_if, only.might) %>% dplyr::count() %>% arrange(desc(n)) %>%
+  group_by(id) %>% mutate(proportion = n / sum(n)) %>%
+  filter(str_detect(id, "independent")) %>% arrange(id, proportion) %>%
+  filter(only.might_or_if) %>% dplyr::select(-only.might_or_if)
+tbls.empiric.only_might_or_if
 ###############################################################################
-# load likelihood parameters (for fitted data)
-pars_likelihoods <- get_likelihood_params_fitted_data(params)
-params$likelihoods_zoib <- pars_likelihoods$likelihoods_zoib
-params$likelihoods_gaussian <- pars_likelihoods$likelihoods_gaussian
 
-# Weights by contexts (M_Ci) ----------------------------------------------
-params$packages <- c(params$packages, paste("webppl-model", "node_modules", 
-                                            "dataHelpers", sep = FS))
 
-active_config = "priors_relations"
-Sys.setenv(R_CONFIG_ACTIVE = active_config)
-par_relations <- config::get()
-
-weights = map(c("uninformative", "informative"), function(prior_r){
-  params$prior_relations <- par_relations[[prior_r]]
+# compute weights ---------------------------------------------------------
+weights = map(c("informative", "semi_informative"), function(prior_r){
+  
+  params <- prepare_data_for_wppl(config_cns, prior_r, 
+                                  extra_packages = extra_packages)
+  params$verbose <- FALSE
+  #params$prior_relations <- par_relations[[prior_r]]
   weights_ci = run_webppl("webppl-model/weights-contexts.wppl", params) %>% 
     bind_rows(.id = "id") %>% group_by(id) %>% arrange(desc(probs)) %>% 
     unnest(c(support)) %>% 
@@ -165,32 +100,33 @@ weights = map(c("uninformative", "informative"), function(prior_r){
     pivot_wider(names_from = table.support, values_from = table.probs) %>% 
     group_by(id) %>% mutate(cdf = cumsum(probs)) %>% 
     add_column(prior_r = prior_r)
+  save_data(weights_ci %>% add_column(n_rsa_states = params$nb_rsa_states),
+            paste(params$dir_results, FS, "weights_ci_", prior_r, 
+                  params$nb_rsa_states, ".rds", sep=""))
+  return(weights_ci)
 }) %>% bind_rows() 
 
-save_data(weights %>% dplyr::select(id, bn_id, probs, prior_r, cn) %>% 
-            add_column(n_rsa_states = params$n_forward_samples), 
-          paste(result_dir, "weights_ci.rds", sep=FS))
 
-# analyze weights
+# analyze weights ---------------------------------------------------------
 # check how likely states where only conditional or might are assertable are 
 # for independent contexts
+# (should not be the case at all if prior over relations =1 for A||C)
 weights %>% 
   group_by(id, prior_r, cn) %>% 
-  filter(bn_id %in% bn_ids.only_might_or_if & str_detect(id, "independent")) %>% 
+  filter(bn_id %in% bn_ids.only_might_and_if & str_detect(id, "independent")) %>% 
   summarize(p = sum(probs), .groups = "drop_last") %>% arrange(prior_r, desc(p))
 
 # relations for uninformative prior over relations
-weights.relations = weights %>% filter(prior_r == "uninformative") %>% 
+weights.relations = weights %>% filter(prior_r == "semi_informative") %>% 
   group_by(id, r, probability) %>% 
   summarize(p = sum(probs), .groups = "drop_last") %>% 
   arrange(id, desc(p)) %>% mutate(p = round(p, 2)) %>% 
   filter(p != 0)
-weights.relations %>% filter(id == "independent_ul")
 weights.relations %>% filter(startsWith(id, "if1"))
 weights.relations %>% filter(startsWith(id, "if2"))
 
 
-weights.relations %>% 
+weights.relations %>% filter(str_detect(id, "if")) %>% 
   ggplot(aes(fill=probability)) + 
   geom_bar(aes(y=r, x=p), stat="identity") +
   facet_wrap(~id, scales="free")
@@ -212,13 +148,16 @@ expected.slider_ratings = slider_ratings %>%
 data.joint <- bind_rows(
   expected.states, 
   expected.slider_ratings %>% add_column(prior_r = "informative"),
-  expected.slider_ratings %>% add_column(prior_r = "uninformative")
+  expected.slider_ratings %>% add_column(prior_r = "semi_informative")
 ) %>% 
   mutate(cell = factor(cell, levels = c("AC", "A-C", "-AC", "-A-C")))
 
+
+
+# some plots --------------------------------------------------------------
 # plot expected ratings / model states
 plots.expected_states = map(data.joint$id %>% unique, function(id){
-  p <- data.joint %>%
+  p1 <- data.joint %>%
     filter(id == !!id) %>%
     ggplot(aes(x = cell, fill = data, color=data)) +
     geom_bar(aes(y = ev_cell), stat = "identity",
@@ -231,7 +170,7 @@ plots.expected_states = map(data.joint$id %>% unique, function(id){
     labs(x = "event", y = "Expected value states/slider ratings", title = id) +
     theme(legend.position = "bottom")
 
-  p <- data.joint %>% 
+  p2 <- data.joint %>% 
     filter(id == !!id) %>%
     filter(!(data=="empirical slider ratings"& prior_r=="informative")) %>% 
     mutate(data = case_when(data == "model states" ~ paste(prior_r, data), 
@@ -241,7 +180,7 @@ plots.expected_states = map(data.joint$id %>% unique, function(id){
     facet_wrap(~data, scales = "free_x", 
                labeller=labeller(cell=cell_names), ncol=3) +
     labs(x = "event", y = "Expected value states/slider ratings", title = id)
-  return(p)
+  return(p2)
 })
 plots.expected_states
 

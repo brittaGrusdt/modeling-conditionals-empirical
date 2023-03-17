@@ -1,8 +1,10 @@
 var sampled_params = data["sampled_params"]
 // display(sampled_params[1])
 
+var n = sampled_params.length
 // iterate over sampled parameters
 var rsa_predictions = map(function(pars){
+  display("running nb. " + pars.rowid + " from " + n + " ...")
   var data_from_r = Object.assign(data, pars)
   var rsa_predictions = run_rsa_model(data_from_r)
   return([pars.sample_id, rsa_predictions])

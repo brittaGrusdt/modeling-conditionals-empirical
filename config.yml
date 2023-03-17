@@ -1,124 +1,150 @@
-default:
+default: 
+  save: 1
+  verbose: 1
+
+pathes: 
   dir_data: "data"
   fn_cleaned_data: "cleaned-data.csv"
-  dir_webppl_model: !expr paste("webppl-model", "default-model", sep = .Platform$file.sep)
   dir_model_input: "data"
   dir_wppl_code: "webppl-model"
-  dir_presampled_states: "presampled-states"
-  fn_rsa_model: "default-model.wppl"
-  fn_rsa_single_run: "model-single-run-by-contexts.wppl"
-  fn_get_weights: "weights-subj-trial.wppl"
-  fn_gen_utts: "utterances.wppl"
-  fn_results: "results-speaker.rds"
-  fn_params: "params-speaker.rds"
-  generate_utterances: false
-  states_presampled: true
+  dir_results: !expr paste("results", "default-prior", sep=.Platform$file.sep)
+  dir_dep_likelihoods: !expr paste("results", "default-prior", "dependent-contexts", "zoib-model", sep=.Platform$file.sep)
+  dir_ind_likelihoods: !expr paste("results", "default-prior", "independent-contexts", "zoib-model", sep=.Platform$file.sep)
+  fn_likelihoods: "mean-posteriors-and-diagnostics.rds"
+  wppl_predictive_checks: !expr paste("webppl-model", "predictive-checks.wppl", sep=.Platform$file.sep)
+  wppl_fit_rsa: !expr paste("webppl-model", "fit-rsa.wppl", sep=.Platform$file.sep)
+  bootstrapped_ci_ratios: !expr paste("data", "bootstrapped_uc_ratios_ci.rds", sep=.Platform$file.sep)
+  # pathes of own packages
+  dataHelpers: !expr paste("webppl-model", "node_modules", "dataHelpers", sep=.Platform$file.sep)
+  conditionalsDefault: !expr paste("webppl-model", "node_modules", "conditionalsDefault", sep=.Platform$file.sep)
+  conditionalsModel: !expr paste("webppl-model", "node_modules", "conditionalsModel", sep=.Platform$file.sep)
+  conditionalsHelpers: !expr paste("webppl-model", "node_modules", "conditionalsHelpers", sep=.Platform$file.sep)
+  #dir_webppl_model: !expr paste("webppl-model", "default-model", sep = .Platform$file.sep)
+
+rsa_params:
   utterances: !expr c("-A", "A", "-C", "C", "-C and -A", "-C and A", "C and -A", 
                       "C and A", "might -A", "might A", "might -C", "might C", 
                       "A > C", "C > A", "A > -C", "-C > A", "-A > C", "C > -A",
                       "-A > -C", "-C > -A") 
-  save: true
-  cost_conditional: 0
-  cost_conjunction: 0
-  cost_literal: 0
-  cost_might: 0
-  alpha: 3
-  gamma: 1
-  theta: 0.7
-  theta_might: 0
-  n_forward_samples: 500
-  verbose: true
-  causal_nets_dep: !expr c("A implies C_unif-high-low",
-                           "C implies A_unif-high-low", 
-                           "-A implies C_unif-high-low",
-                           "-C implies A_unif-high-low")
-  causal_nets_ind: !expr c("A || C_unif-unif")
-  cns: !expr c("A implies C", "C implies A", "A implies -C", "C implies -A", "A || C")
+  default_alpha: 3
+  default_gamma: 1
+  default_theta: 0.7
+  default_theta_might: 0
+  nb_rsa_states: 500
   packages:  !expr c(paste("webppl-model", "node_modules", 
                            "conditionalsHelpers", sep = .Platform$file.sep),
                      paste("webppl-model", "node_modules", 
                            "conditionalsDefault", sep = .Platform$file.sep),
                      paste("webppl-model", "node_modules", 
                            "conditionalsModel", sep = .Platform$file.sep))
-  #seed_webppl: !expr as.numeric(Sys.time())
   seed_webppl: 123467
-  vars: !expr c("A", "C")
-  level_max: "speaker"
-  # @arg utt: - if set to "p_delta" or "p_rooij", respective value must be
-  #           large (see in webppl file) for all states given to the speaker,
-  #           - if set to "" no condition, just sampled from prior as usual
-  utt: ""
-  dir_dep_likelihoods: !expr paste("results", "default-prior", "dependent-contexts", "zoib-model", sep=.Platform$file.sep)
-  dir_ind_likelihoods: !expr paste("results", "default-prior", "independent-contexts", "zoib-model", sep=.Platform$file.sep)
-  fn_likelihoods: "mean-posteriors-and-diagnostics.rds"
   speaker_type: 'pragmatic_utt_type'
-  utt_cost: 0
-  use_drift_kernel: TRUE
-  par_fit: !expr c("alpha", "theta") # , "utt_cost", "gamma"
-
-fine_grained_causal_nets:
-  dep_causal_power: !expr c("high", "low", "unc")
-  dep_noise: !expr c("high", "low", "unc")
-  dep_marginal: !expr c("unif")
-  ind_a: !expr c("unif")
-  ind_c: !expr c("unif")
-  
-cleaned_data:
-  fn_tbls_empiric_pids: "tables-empiric-pids.rds"
-  fn_tables_smooth: "pe_tables_smooth.csv"
-  fn_predictions_by_context: "predictions-by-context.csv"
-  fn_predictions_by_context_chunked: "predictions-by-context-chunked.csv"
-  fn_joint_results: "exact-model-behavioral-predictions.csv"
-
-  
-recleaned_data:
-  fn_tbls_empiric_pids: "tables-empiric-pids-recleaned.rds"
-  fn_tables_smooth: "pe_tables_smooth_recleaned.csv"
-  fn_predictions_by_context: "predictions-by-context-recleaned.csv"
-  fn_predictions_by_context_chunked: "predictions-by-context-chunked-recleaned.csv"
-  fn_joint_results: "exact-model-behavioral-predictions-recleaned.csv"
-  fn_recleaned_data: "recleaned-data.csv"
-
-
-default_prior:
-  dir_results: !expr paste("results", "default-prior", sep=.Platform$file.sep)
-  name: "default-prior"
+  # likelihoods for generating states default prior
   conditional_probs: !expr tibble::tribble(~grp, ~variable, ~shape1, ~shape2,
-                                           "high", "causal_power", 10, 1,
-                                           "high", "noise", 10, 1,
-                                           "high", "p_dep_pos", 10, 1,
-                                           "unc", "causal_power", 5, 5,
-                                           "unc", "noise", 5, 5,
-                                           "unc", "p_dep_pos", 5, 5,
-                                           "low", "causal_power", 1, 10,
-                                           "low", "noise", 1, 10,
-                                           "low", "p_dep_pos", 1, 10)
+                                         "high", "causal_power", 10, 1,
+                                         "high", "noise", 10, 1,
+                                         "high", "p_dep_pos", 10, 1,
+                                         "unc", "causal_power", 5, 5,
+                                         "unc", "noise", 5, 5,
+                                         "unc", "p_dep_pos", 5, 5,
+                                         "low", "causal_power", 1, 10,
+                                         "low", "noise", 1, 10,
+                                         "low", "p_dep_pos", 1, 10)
   marginals: !expr  tibble::tribble(~grp, ~shape1, ~shape2,
                                     "low", 1, 10,
                                     "unc", 5, 5,
                                     "high", 10, 1,
                                     "unif", 1, 1)
-  # causal nets
-  p_noise: !expr c("low")
-  p_cp: !expr c("high")
-  p_ant: !expr c("high", "low", "unc")
-  rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
-  p_a: !expr c("high", "low", "unc")
-  p_c: !expr c("high", "low", "unc")
-  #fn_kl_divergences: "best-kl-divergences.rds"
+   
+rsa_fit_params:
+  par_fit: !expr c("alpha", "theta") # , "utt_cost", "gamma"
+  #use_drift_kernel: TRUE
 
-# cf_prior_match_tables:
-#   inherits: default_prior
-#   match_by: "tables"
+
+#default:
+  #dir_presampled_states: "presampled-states"
+  #fn_rsa_model: "default-model.wppl"
+  #fn_rsa_single_run: "model-single-run-by-contexts.wppl"
+  #fn_get_weights: "weights-subj-trial.wppl"
+  #fn_gen_utts: "utterances.wppl"
+  #fn_results: "results-speaker.rds"
+  #fn_params: "params-speaker.rds"
+  #generate_utterances: false
+  #states_presampled: true
+  # cost_conditional: 0
+  # cost_conjunction: 0
+  # cost_literal: 0
+  # cost_might: 0
+  # causal_nets_dep: !expr c("A implies C_unif-high-low",
+  #                          "C implies A_unif-high-low", 
+  #                          "-A implies C_unif-high-low",
+  #                          "-C implies A_unif-high-low")
+  # causal_nets_ind: !expr c("A || C_unif-unif")
+  #cns: !expr c("A implies C", "C implies A", "A implies -C", "C implies -A", "A || C")
+  #seed_webppl: !expr as.numeric(Sys.time())
+  #vars: !expr c("A", "C")
+  #level_max: "speaker"
+  # @arg utt: - if set to "p_delta" or "p_rooij", respective value must be
+  #           large (see in webppl file) for all states given to the speaker,
+  #           - if set to "" no condition, just sampled from prior as usual
+  #utt: ""
+  #utt_cost: 0
+
+cns:
+  rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
+  rels_ind: "A || C"
+
+default_cns: 
+  inherits: cns
+  dep_causal_power: !expr c("high")
+  dep_noise: !expr c("low")
+  dep_marginal: !expr c("unif")
+  ind_a: !expr c("unif")
+  ind_c: !expr c("unif")
+  
+fine_grained_cns:
+  inherits: cns
+  dep_causal_power: !expr c("high", "unc")
+  dep_noise: !expr c("low", "unc")
+  dep_marginal: !expr c("unif")
+  ind_a: !expr c("unif")
+  ind_c: !expr c("unif")
+
+generate_utts:
+  vars: !expr c("A", "C")
+
+# cleaned_data:
+#   fn_tbls_empiric_pids: "tables-empiric-pids.rds"
+#   fn_tables_smooth: "pe_tables_smooth.csv"
+#   fn_predictions_by_context: "predictions-by-context.csv"
+#   fn_predictions_by_context_chunked: "predictions-by-context-chunked.csv"
+#   fn_joint_results: "exact-model-behavioral-predictions.csv"
 # 
-# cf_prior_match_kl:
-#   inherits: default_prior
-#   match_by: "KL-divergence"
+# recleaned_data:
+#   fn_tbls_empiric_pids: "tables-empiric-pids-recleaned.rds"
+#   fn_tables_smooth: "pe_tables_smooth_recleaned.csv"
+#   fn_predictions_by_context: "predictions-by-context-recleaned.csv"
+#   fn_predictions_by_context_chunked: "predictions-by-context-chunked-recleaned.csv"
+#   fn_joint_results: "exact-model-behavioral-predictions-recleaned.csv"
+#   fn_recleaned_data: "recleaned-data.csv"
+
+
+# default_prior:
+#   dir_results: !expr paste("results", "default-prior", sep=.Platform$file.sep)
+#   name: "default-prior"
+#   # causal nets
+#   p_noise: !expr c("low")
+#   p_cp: !expr c("high")
+#   p_ant: !expr c("high", "low", "unc")
+#   rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
+#   p_a: !expr c("high", "low", "unc")
+#   p_c: !expr c("high", "low", "unc")
+  #fn_kl_divergences: "best-kl-divergences.rds"
 
 
 priors_relations:
-  uninformative: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context", 1/8, 1/8, 1/8, 1/8, 0.5, "if1",  1/8, 1/8, 1/8, 1/8, 0.5, "if2",  1/8, 1/8, 1/8, 1/8, 0.5, "independent")
   informative: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context",1, 0, 0, 0, 0, "if1", 0.9, 0.1, 0, 0, 0, "if2", 0, 0, 0, 0, 1, "independent")
+  semi_informative: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context", 1/8, 1/8, 1/8, 1/8, 0.5, "if1",  1/8, 1/8, 1/8, 1/8, 0.5, "if2",  0, 0, 0, 0, 1, "independent")
 
 
 # there needs to be 1 blank final line!

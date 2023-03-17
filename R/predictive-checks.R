@@ -9,95 +9,45 @@ library(tidybayes)
 
 source(here("R", "helpers-plotting.R"))
 source(here("R", "helpers-load-data.R"))
+source(here("R", "helpers-rsa-model.R"))
 theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 
 # Setup -------------------------------------------------------------------
-# Priors
-active_config = "default_prior"
-Sys.setenv(R_CONFIG_ACTIVE = active_config)
+config_cns = "fine_grained_cns"
+extra_packages = c("dataHelpers")
+config_weights_relations = "semi_informative"
+config_fits <- "rsa_fit_params"
+params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
+                                config_fits = config_fits,
+                                extra_packages = extra_packages)
 
-# parameters to run webppl model
-params <- config::get()
-if(!dir.exists(params$dir_results)) dir.create(params$dir_results, recursive = T)
 result_dir = params$dir_results
 
-path_model_file = paste(params$dir_wppl_code, "predictive-checks.wppl", sep=FS)
-
-################################################################################
-# use more fine-grained causal nets (causal power, noise: low/unc/high)
-active_config = "fine_grained_causal_nets"
-Sys.setenv(R_CONFIG_ACTIVE = active_config)
-pars.cns <- config::get()
-cns = create_causal_nets(pars.cns$dep_causal_power, pars.cns$dep_noise, 
-                         pars.cns$dep_marginal, params$rels_dep,
-                         pars.cns$ind_a, pars.cns$ind_c)
-params$causal_nets_dep = cns$dep
-params$causal_nets_ind = cns$ind
-################################################################################
-
-
-# behavioral data
-data.behav <- read_csv(here(params$dir_data, "cleaned-data.csv")) %>% 
-  dplyr::select(prolific_id, id, utt.standardized, uc_task, pe_task, slider) %>% 
-  translate_standardized2model() 
-
-# add parameters to run webppl model
-# observed data each participant and trial + ratios
-pars.observations <- get_observed_data(data.behav, params)
-# draw samples from prior
-pars.rsa_states <- get_rsa_states(params)
-# load likelihood parameters fitted to data
-pars.likelihoods <- get_likelihood_params_fitted_data(params)
-# if not provided, all utterances equally likely
-# params$p_utts = rep(1 / length(params$utterances), length(params$utterances))
-params <- c(params, pars.observations, pars.likelihoods, pars.rsa_states)
-
 # empirically observed data
-df.observed <- params$observed_utts_ratios %>% 
+df.bootstrapped_uc_ratios_ci <- readRDS(params$bootstrapped_ci_ratios) %>% 
+  translate_standardized2model() %>% 
   mutate(utterance = factor(utterance, levels = c(utts.model.conjs, 
                                                   utts.model.literals,
                                                   utts.model.ifs,
                                                   utts.model.mights)))
-obs.ind <- df.observed %>% filter(str_detect(id, "independent")) %>% 
-  mutate(id = map_chr(id, get_name_context))
-obs.dep <- df.observed %>% filter(str_detect(id, "if")) 
+obs.ind <- df.bootstrapped_uc_ratios_ci %>%
+  filter(str_detect(id, "independent")) %>% 
+  mutate(trial=id, id = map_chr(id, get_name_context)) %>% 
+  rename(utt = utterance) %>% 
+  mutate(utterance = utt.standardized) %>% 
+  chunk_utterances() %>% 
+  rename(utt_type = utterance, utterance = utt)
+obs.dep <- df.bootstrapped_uc_ratios_ci %>%
+  filter(str_detect(id, "if")) %>% mutate(trial = id) %>% 
+  rename(utt = utterance) %>% 
+  mutate(utterance = utt.standardized) %>% 
+  chunk_utterances() %>% 
+  rename(utt_type = utterance, utterance = utt)
   
-# Run Model ---------------------------------------------------------------
-# 1. predictions by contexts
-params$packages <- c(params$packages, paste("webppl-model", "node_modules", 
-                                            "dataHelpers", sep = FS))
-
-active_config = "priors_relations"
-Sys.setenv(R_CONFIG_ACTIVE = active_config)
-par_relations <- config::get()
-params$prior_relations <- par_relations[["informative"]]
-#params$utt_cost <- tibble(utterance = params$utterances, cost=params$utt_cost)
-
-# Helper functions --------------------------------------------------------
-format_param_samples = function(samples){
-  samples.utt_cost <- samples %>% 
-    filter(startsWith(as.character(Parameter), "utts.")) %>% 
-    mutate(Parameter = as.character(Parameter), 
-           Parameter = str_replace(Parameter, "utts.", "")) %>% 
-    rename(cost = value, utterance = Parameter) %>% 
-    group_by(Iteration, Chain) %>% 
-    nest() %>% rename(utt_cost=data)
-  
-  samples.formatted <- left_join(
-    samples.utt_cost,
-    samples %>% 
-      filter(!startsWith(as.character(Parameter), "utts.")) %>% 
-      pivot_wider(names_from=Parameter, values_from=value)
-  ) %>% 
-    mutate(sample_id = paste("chain", Chain, "-Iteration", Iteration, sep=""))
-  return(samples.formatted)
-}
-
 # Prior predictive --------------------------------------------------------
-params$par_fit <- c("alpha", "theta", "utt_cost") #, "gamma")
-
 # condition statements are necessary to make sure that we can actually run 
 # the RSA-model with the sampled set of parameters!
+
 model <- "
 var model_prior = function(){
   var params = priorSample(data['par_fit'])
@@ -155,24 +105,26 @@ prior_samples %>% filter(!startsWith(Parameter, "utts.")) %>%
 # density plot with MCMC-samples from prior distributions overlayed with 
 # samples from underlying prior distributions (without considering invalid
 # utt-states based on theta)
-x <- seq(0, 200, by=0.01)
+x <- seq(0, 100, by=0.01)
 distrs = tibble(y_alpha = exp(rnorm(length(x), mean=1.5, sd=1)),
-                y_theta = rbeta(length(x), 8, 2)) %>% 
+                y_theta = rbeta(length(x), 4, 2)) %>% 
   pivot_longer(cols = c(y_alpha, y_theta), names_to = "Parameter", names_prefix = "y_")
-
+# check different parametrizations for alpha # 
+distrs %>% ggplot(aes(x=value)) + geom_density() + xlim(0, 300)
+  
 prior_samples %>% 
   filter(!startsWith(Parameter, "utts.")) %>% 
   ggplot(aes(x=value)) + 
   geom_density(aes(color=Chain)) +
   geom_density(data=distrs) +
   facet_wrap(~Parameter, scales="free") 
-# distribution of theta is shifted away from 1 since for larger theta there are
-# utterances without states!
 
 
 # then run RSA-model once with each sampled set of parameters
 params$sampled_params <- format_param_samples(prior_samples)[1:100,]
-rsa_data <- webppl(program_file = path_model_file,
+params$verbose <- 0
+#params$utt_cost <- tibble(utterance = params$utterances, cost=params$utt_cost)
+rsa_data <- webppl(program_file = params$wppl_predictive_checks,
                    data = params,
                    data_var = "data",
                    random_seed = params$seed_webppl,
@@ -188,6 +140,8 @@ prior_predictive <- rsa_data %>% imap(function(x, id){
                                                   utts.model.literals,
                                                   utts.model.ifs,
                                                   utts.model.mights)))
+save_data(prior_predictive, 
+          paste(result_dir, "prior-predictive-alpha35.rds", sep=FS))
 # Plots -------------------------------------------------------------------
 model_utts = c("-A", "A", "-C", "C",
                "-C and -A", "-C and A", "C and -A", "C and A", 
@@ -212,10 +166,9 @@ prior_pred.ind <- prior_predictive %>% filter(str_detect(id, "independent")) %>%
 prior_pred.dep <- prior_predictive %>% filter(str_detect(id, "if"))
 
 # 1. prior predictive bar plot for each utterance independent contexts
-prior_pred.ind %>% #filter(id=="ind:UH") %>% 
+prior_pred.ind %>% #filter(id=="ind:HH") %>% 
   ggplot(aes(x=p_hat, fill=id)) + 
   geom_histogram(alpha=0.5, position = 'identity', binwidth=0.01) +
-  # geom_point(data = obs.ind, aes(x=ratio, y=0, color=id), size=1, stroke=1, shape=4) +
   facet_wrap(~utterance, scales="free_y", ncol=4) +
   theme(axis.text.x = element_text(size=8)) +
   scale_fill_brewer(name = "context", palette = "Set1") +
@@ -225,8 +178,6 @@ prior_pred.ind %>% #filter(id=="ind:UH") %>%
 prior_pred.dep %>% filter(str_detect(id, "if1")) %>% 
   ggplot(aes(x=p_hat, fill=id)) + 
   geom_histogram(alpha=0.5, position = 'identity', binwidth=0.01) +
-  # geom_point(data = obs.dep %>% filter(str_detect(id, "if1")), 
-  #            aes(x=ratio, y=0, color=id), size=1, stroke=1, shape=4) +
   facet_wrap(~utterance, scales="free_y", ncol=4) +
   theme(axis.text.x = element_text(size=8)) +
   scale_fill_brewer(name = "context", palette = "Set1", 
@@ -237,8 +188,6 @@ prior_pred.dep %>% filter(str_detect(id, "if1")) %>%
 prior_pred.dep %>% filter(str_detect(id, "if2")) %>% 
   ggplot(aes(x=p_hat, fill=id)) + 
   geom_histogram(alpha=0.5, position = 'identity', binwidth=0.01) +
-  # geom_point(data = obs.dep %>% filter(str_detect(id, "if2")), 
-  #            aes(x=ratio, y=0, color=id), size=1, stroke=1, shape=4) +
   facet_wrap(~utterance, scales="free_y", ncol=4) +
   theme(axis.text.x = element_text(size=8)) +
   scale_fill_brewer(name = "context", palette = "Set1", 
@@ -268,10 +217,101 @@ means.prior %>% mutate(p_hat = round(p_hat, 3)) %>% filter(p_hat > 0) %>%
   theme(axis.text.y = element_text(size=10)) +
   facet_wrap(~id, scales = "free")
 
+# plot prior predictive given in dependence of alpha and theta
+pp <- left_join(
+  prior_predictive, 
+  params$sampled_params %>% dplyr::select(alpha, theta, sample_id)
+)  %>% mutate(utt=utterance, utterance = as.character(utterance)) %>% 
+  chunk_utterances() %>% 
+  rename(utt_type = utterance, utterance = utt) %>% 
+  mutate(cat_alpha = case_when(alpha < 1 ~ "0 < alpha < 1", 
+                               alpha < 2 ~ "1 <= alpha < 2", 
+                               alpha < 5 ~ "2 <= alpha < 5", 
+                               alpha < 10 ~ "5 <= alpha < 10",
+                               alpha < 20 ~ "10 <= alpha < 20",
+                               alpha < 30 ~ "20 <= alpha < 30",
+                               T ~ "30 <= alpha", 
+  ))
+pp %>% group_by(cat_alpha) %>% dplyr::count() %>% ungroup() %>% 
+  mutate(ratio = n/sum(n))
 
+# independent contexts
+trial <- "independent_uh"
+ut <- "conjunction"
+df.obs <- obs.ind %>% filter(trial == !!trial & utt_type == ut)
+pp %>% filter(id==trial & utt_type == ut) %>%  #& utterance == "C and A") %>% 
+  ggplot(aes(color = utterance, group=utterance)) + 
+  geom_point(aes(x=theta, y = p_hat), alpha=0.5) +
+  geom_line(aes(x=theta, y = p_hat), alpha=0.5) +
+  geom_point(data = df.obs, aes(y=estimate, x=0), size=1, stroke=1, shape=4) +
+  # geom_segment(data = df.obs, aes(x=0, y=lower, xend = 0.8, yend=lower)) +
+  # geom_segment(data = df.obs, aes(x=0, y=upper, xend = 0.8, yend=upper)) +
+  facet_wrap(~cat_alpha) +
+  ggtitle(get_name_context(trial))
+
+#dependent contexts
+trial <- "if1_uh"
+ut <- "conditional"
+df.obs <- obs.dep %>% filter(trial == !!trial & utt_type == ut) %>% 
+  filter(utterance %in% c("A > C", "C > A", "-A > -C", "-C > -A"))
+
+pp %>% filter(id==trial & utt_type == ut) %>%
+  filter(utterance %in% c("A > C", "C > A", "-A > -C", "-C > -A")) %>% 
+  ggplot(aes(color = utterance, group=utterance)) + 
+  geom_point(aes(x=theta, y = p_hat), alpha=0.5) +
+  geom_line(aes(x=theta, y = p_hat), alpha=0.5) +
+  geom_point(data = df.obs, aes(y=estimate, x=0), size=1, stroke=1, shape=4) +
+  # geom_segment(data = df.obs, aes(x=0, y=lower, xend = 1, yend=lower)) +
+  # geom_segment(data = df.obs, aes(x=0, y=upper, xend = 1, yend=upper)) +
+  facet_wrap(~cat_alpha) +
+  ggtitle(get_name_context(trial))
+
+# consider log likelihoods
+pp.ll = pp %>% distinct_at(vars(c(id, alpha, theta)), .keep_all = T) 
+# only for independent conrtexts ll becomes -Inf
+pp.ll %>% filter(is.infinite(ll_ci)) %>% pull(id) %>% unique()
+
+pp.ll %>% filter(!str_detect(id, "if") & !is.infinite(ll_ci)) %>% 
+  distinct_at(vars(c(id, alpha, theta, cat_alpha))) %>% 
+  ggplot(aes(x=alpha, y=theta)) + 
+  geom_density_2d_filled()
+
+pp.ll %>% filter(!str_detect(id, "if") & !is.infinite(ll_ci)) %>% arrange(desc(theta))
+df = pp.ll %>% filter(!str_detect(id, "if") & is.infinite(ll_ci)) %>% 
+  group_by(id) %>% filter(theta == min(theta)) 
+df
+alpha = df$alpha %>% unique
+theta = df$theta %>% unique
+
+pp %>% 
+  filter(alpha== !!alpha & !str_detect(id, "if")) %>% 
+  filter(theta >= !!theta) %>% 
+  arrange(id, p_hat) %>% 
+  filter(p_hat == 0) %>% group_by(id, utterance) %>% dplyr::count()
+
+# are there any dependent contexts where any utterance is predicted with probab. 0?
+# NO
+pp %>% dplyr::select(id, p_hat, utterance) %>% filter(str_detect(id, "if")) %>% 
+  filter(p_hat == 0)
+
+# check weights for independent contexts
+weights <- readRDS(
+  paste(params$dir_results, FS,
+        "weights_ci_", config_weights_relations, params$nb_rsa_states, ".rds", 
+        sep="")
+)
+weights.assertable_u = weights %>% get_assertable_utterances(theta)
+
+# weights for problematic utterance 'neither block falls' are very small 
+# for dependent contexts (given large theta so that -Inf in indep. contexts)
+# and =0 for independent contexts!
+weights.assertable_u %>% group_by(id) %>% 
+  filter(utt == standardized.sentences$none) %>% 
+  distinct_at(vars(c(id, bn_id)), .keep_all = T) %>% 
+  summarize(summed_weight = sum(probs)) %>% arrange(desc(summed_weight))
 
 # Posterior predictive ----------------------------------------------------
-fn <- "alpha_theta_utt_cost"
+fn <- paste(params$par_fit, collapse = "_")
 # get samples from posterior distribution
 posterior_samples <- readRDS(here(params$dir_results, 
                              paste("mcmc-posterior-fit-context-predictions-",
@@ -279,11 +319,12 @@ posterior_samples <- readRDS(here(params$dir_results,
 params$sampled_params <- format_param_samples(posterior_samples)[1:100,]
 
 # then run RSA-model once with each sampled set of parameters
-data <- webppl(program_file = path_model_file,
+data <- webppl(program_file = params$wppl_predictive_checks,
                data = params,
                data_var = "data",
                random_seed = params$seed_webppl,
                packages = params$packages)
+
 
 posterior_predictive <- data %>% imap(function(x, id){
   predictions <- as_tibble(x)
@@ -291,23 +332,134 @@ posterior_predictive <- data %>% imap(function(x, id){
     as_tibble(y) %>% mutate(ll_ci = as.numeric(ll_ci))
   }) %>% bind_rows() %>% add_column(sample_id = id)
 }) %>% bind_rows()
-
+save_data(posterior_predictive, 
+          paste(result_dir, "posterior-predictive.rds", sep=FS))
 
 predictives <- bind_rows(
   prior_predictive %>% add_column(distribution = "prior predictive"),
   posterior_predictive %>% add_column(distribution = "posterior predictive")
 )
-predictives %>%
+
+trials <- params$observations$id %>% unique()
+utterances <- posterior_predictive$utterance %>% unique()
+map(trials, function(trial){
+  if(str_detect(trial, "independent")){
+    df.obs <- obs.ind %>% filter(trial == !!trial)
+  }else {
+      df.obs <- obs.dep %>% filter(trial == !!trial)
+  }
+  # add 0 for unobserved utterances
+  df.obs <- bind_rows(
+    df.obs, 
+    tibble(utterance = utterances[!utterances %in% df.obs$utterance],
+          estimate = 0, lower = 0, upper = 0, trial = trial, 
+          id = df.obs$id[1])
+  ) %>% 
   mutate(utterance = factor(utterance, levels = c(utts.model.conjs, 
                                                   utts.model.literals,
                                                   utts.model.ifs,
-                                                  utts.model.mights))) %>% 
-  filter(str_detect(id, trial)) %>% 
-  ggplot(aes(x=p_hat)) + 
-  geom_histogram(alpha=0.75, aes(fill=distribution)) +
-  geom_point(data = df.observed, aes(x=ratio, y=0), size=2, color='black') +
-  facet_wrap(~utterance, scales="free_y", ncol=4) +
-  theme(axis.text.x = element_text(size=8))
+                                                  utts.model.mights)))
+  
+  p <- predictives %>%
+    mutate(utterance = factor(utterance, levels = c(utts.model.conjs, 
+                                                    utts.model.literals,
+                                                    utts.model.ifs,
+                                                    utts.model.mights))) %>% 
+    filter(str_detect(id, trial)) %>% 
+    ggplot() +
+    geom_histogram(aes(x=p_hat, fill=distribution), alpha=0.5,
+                   position = 'identity', binwidth=0.005) +
+    geom_point(data = df.obs, aes(x=estimate, y=0), color='firebrick', 
+               size=1, stroke=1, shape=4) +
+    geom_segment(data = df.obs, aes(x=lower, y=0, xend = upper, yend=0), 
+                 color = 'firebrick') +
+    #geom_line(data = df.obs, aes(x=lower, y=upper, group = utterance), size=1) +
+    facet_wrap(~utterance, scales="free", ncol=4) +
+    theme(axis.text.x = element_text(size=8), axis.text.y = element_text(size=8)) +
+    scale_fill_brewer(name = "distribution", palette = "Set1") +
+    labs(x = "predicted probability", y="count", title = get_name_context(trial))
+  ggsave(paste(result_dir, FS, "predictive-checks-", trial, ".png", sep=""), p,
+         width = 10, height = 10)
+})
 
+
+# Predictions for single states -------------------------------------------
+# params$utt_cost <- tibble(utterance = params$utterances, cost=params$utt_cost)
+
+wppl_code = "
+  var sampled_params = data['sampled_params']
+  var bn_ids = _.map(ALL_BNS, 'bn_id')
+  var idx_bn = bn_ids.indexOf(data['state_id'][0])
+  var bn = ALL_BNS[idx_bn]
+  var s_id = bn.bn_id
+  // iterate over sampled parameters
+  var rsa_predictions = map(function(pars){
+    var params = {
+      alpha: pars.alpha,
+      //gamma: pars.gamma,
+      theta: pars.theta,
+      //utt_cost: Object.fromEntries(
+      //zip(_.map(data.utt_cost, 'utterance'), _.map(data.utt_cost, 'cost'))
+      //)
+    }
+    display('theta: ' + params.theta + ' alpha: ' + params.alpha)
+    setParams(params)
+  
+    var rsa_speaker = run_speaker([bn], data['speaker_type'], false)
+    var state_prob_pairs = Object.values(Object.values(rsa_speaker[s_id].params)[0])
+    var utts = _.map(state_prob_pairs, 'val')
+    var ps = _.map(state_prob_pairs, 'prob')
+    
+    return({p_hat: ps,
+            utterance: utts, 
+            theta: params.theta,
+            alpha: params.alpha,
+            sample_id: pars.sample_id,
+            bn_id: s_id})
+  }, sampled_params)
+
+  rsa_predictions
+"
+
+# single state where P(b,g) is closest to 1
+states <- params$prior_samples %>%
+  dplyr::select(bn_id, r, probability, table.probs, table.support) %>%
+  unnest(c(table.probs, table.support)) %>%
+  group_by(bn_id) %>%
+  pivot_wider(names_from = "table.support", values_from = "table.probs")
+s = states %>% ungroup() %>% arrange(desc(AC)) %>% slice(0, 1)
+
+theta=0.799
+utts.assertable <- states %>% get_assertable_utterances(theta) %>% 
+  filter(bn_id == s$bn_id) %>% pull(utt)
+
+model_pars = format_param_samples(prior_samples) %>% arrange(theta)
+params$sampled_params <- model_pars[seq(1, nrow(model_pars), by=10),]
+params$state_id = s$bn_id
+
+#keep alpha at 1
+#params$sampled_params$alpha <- 1
+predictions.speaker = webppl(
+  program_code = wppl_code,
+  data = params,
+  data_var = "data",
+  packages = params$packages
+) %>% as_tibble() %>% unnest(c(p_hat, utterance)) %>% 
+  mutate(utt=utterance) %>%  chunk_utterances() %>% 
+  rename(utt_type = utterance, utterance = utt) %>% 
+  mutate(cat_alpha = case_when(alpha < 1 ~ "0 < alpha < 1", 
+                               alpha < 2 ~ "1 <= alpha < 2", 
+                               alpha < 5 ~ "2 <= alpha < 5", 
+                               alpha < 10 ~ "5 <= alpha < 10",
+                               T ~ "10 <= alpha", 
+  ))
+
+predictions.speaker %>% group_by(cat_alpha) %>% dplyr::count() %>% ungroup() %>% 
+  mutate(ratio = n/sum(n))
+
+predictions.speaker %>% 
+  ggplot(aes(x=theta, y = p_hat, color = utt_type, group=utt_type)) + 
+  geom_point() + geom_line() +
+  facet_wrap(~cat_alpha)
 
 

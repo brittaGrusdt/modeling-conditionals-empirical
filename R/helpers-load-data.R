@@ -1,5 +1,7 @@
 # load likelihood parameters fitted to data
-get_likelihood_params_fitted_data = function(params){
+get_likelihood_params_fitted_data = function(){
+  Sys.setenv(R_CONFIG_ACTIVE = "pathes")
+  params <- config::get()
   pars.dep <- readRDS(here(params$dir_dep_likelihoods, params$fn_likelihoods)) %>% 
     dplyr::select(variable, mean, id) %>% 
     rename(p = variable) %>% 
@@ -30,12 +32,24 @@ get_likelihood_params_fitted_data = function(params){
 
 
 draw_states_from_prior = function(params){
-  prior <- webppl(program_file = here("webppl-model", "run-state-prior.wppl"),
+  wppl_code <- "
+    globalStore.n_prior_samples = data['nb_rsa_states'][0]
+    var prior = state_prior()
+    var distributions = {prior:  prior}
+    distributions
+  "
+  Sys.setenv(R_CONFIG_ACTIVE = "rsa_params")
+  params <- c(params, config::get())
+  
+  Sys.setenv(R_CONFIG_ACTIVE = "pathes")
+  pathes <- config::get()
+  packages <- c(pathes$conditionalsHelpers, pathes$conditionalsDefault)
+  
+  prior <- webppl(program_code = wppl_code,
                   data_var = "data",
                   data = params,
                   random_seed = params$seed_webppl,
-                  packages = c("webppl-model/node_modules/conditionalsHelpers", 
-                               "webppl-model/node_modules/conditionalsDefault")) 
+                  packages = packages) 
   states = prior$prior$support %>% as_tibble()
   return(states)
 }
@@ -46,6 +60,8 @@ get_rsa_states = function(params){
   return(pars)
 }
 
+# if cutoff is TRUE (default=FALSE), utterances that were overall not selected 
+# (when proportion rounded to two digits = 0) are filtered out
 get_observed_data = function(data.behav, params, cutoff=F){
   data.uc = data.behav %>%  filter(!is.na(uc_task)) %>% 
     dplyr::select(prolific_id, id, utterance) %>% 
@@ -69,6 +85,7 @@ get_observed_data = function(data.behav, params, cutoff=F){
   
   # observed ratios per context
   contexts <- data.behav$id %>% unique()
+  if(is.null(params$utterances)) stop(message("argument parameters needs entry 'utterances' containing all MODEL utterances"))
   ratios.observed <- left_join(
     tibble(id = contexts, utterance = list(params$utterances)) %>%
       unnest(c(utterance)),

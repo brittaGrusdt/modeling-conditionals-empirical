@@ -1,13 +1,13 @@
 globalStore.thresholds = {theta: data["theta"][0], theta_likely : 0.5, theta_might: data["theta_might"][0]}
 var verbose = data["verbose"][0]
-globalStore.n_prior_samples = data["n_forward_samples"][0]
+globalStore.n_prior_samples = data["nb_rsa_states"][0]
 
 globalStore.state_prior = state_prior()
 
 if(verbose){
   display("theta: " + globalStore.thresholds.theta)
   display("theta: " + globalStore.thresholds.theta_might)
-  display("#forward samples: " + globalStore.n_prior_samples)
+  display("# rsa states: " + globalStore.n_prior_samples)
   //display("variables: " + variables)
 }
 
