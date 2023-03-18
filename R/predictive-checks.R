@@ -306,6 +306,8 @@ subfolder <- paste(params$par_fit, collapse = "_")
 posterior_samples <- readRDS(here(params$config_dir, subfolder, "mcmc-posterior.rds"))
 params$sampled_params <- format_param_samples(posterior_samples)[1:100,]
 
+evs <- posterior_samples %>% group_by(Parameter) %>% 
+  summarize(value = mean(value))
 # then run RSA-model once with each sampled set of parameters
 data <- webppl(program_file = params$wppl_predictive_checks,
                data = params,

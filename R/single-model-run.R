@@ -19,8 +19,8 @@ params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 extra_packages = extra_packages)
 
 # set alpha and theta, otherwise default values used
-params$alpha <- 1.65
-params$theta <- 0.894
+params$alpha <- 3.37
+params$theta <- 0.338
 # params$gamma <- 1
 # params$utt_cost <- df.p_utts %>% dplyr::select(-p) %>% 
 #   pivot_wider(names_from="Parameter", values_from="value")
