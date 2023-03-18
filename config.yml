@@ -13,6 +13,7 @@ pathes:
   fn_likelihoods: "mean-posteriors-and-diagnostics.rds"
   wppl_predictive_checks: !expr paste("webppl-model", "predictive-checks.wppl", sep=.Platform$file.sep)
   wppl_fit_rsa: !expr paste("webppl-model", "fit-rsa.wppl", sep=.Platform$file.sep)
+  wppl_weights: !expr paste("webppl-model", "weights-contexts.wppl", sep=.Platform$file.sep)
   bootstrapped_ci_ratios: !expr paste("data", "bootstrapped_uc_ratios_ci.rds", sep=.Platform$file.sep)
   # pathes of own packages
   dataHelpers: !expr paste("webppl-model", "node_modules", "dataHelpers", sep=.Platform$file.sep)
@@ -39,6 +40,16 @@ rsa_params:
                            "conditionalsModel", sep = .Platform$file.sep))
   seed_webppl: 123467
   speaker_type: 'pragmatic_utt_type'
+  # parameters prior distributions rsa parameters
+  alpha_mu: 1.5
+  alpha_sigma: 1
+  theta_shape1: 4
+  theta_shape2: 2
+  theta_might_shape1: 2
+  theta_might_shape2: 2
+  gamma_a: 0
+  gamma_b: 1
+  cost_lambda: 8
   # likelihoods for generating states default prior
   conditional_probs: !expr tibble::tribble(~grp, ~variable, ~shape1, ~shape2,
                                          "high", "causal_power", 10, 1,

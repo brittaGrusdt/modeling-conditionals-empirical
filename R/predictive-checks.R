@@ -21,8 +21,6 @@ params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 config_fits = config_fits,
                                 extra_packages = extra_packages)
 
-result_dir = params$dir_results
-
 # empirically observed data
 df.bootstrapped_uc_ratios_ci <- readRDS(params$bootstrapped_ci_ratios) %>% 
   translate_standardized2model() %>% 
@@ -52,7 +50,6 @@ model <- "
 var model_prior = function(){
   var params = priorSample(data['par_fit'])
   setParams(params)
-  //display(params)
   // with current sampled set of parameters, are there any states where no
   // utterance is applicable or any utterance without state?
   // if yes do not consider these parameters
@@ -95,7 +92,7 @@ prior_samples <- webppl(
          Chain = as.factor(Chain))
 save_data(prior_samples %>% add_column(n_burn = mcmc_params$n_burn, 
                                        n_lag = mcmc_params$n_lag), 
-          paste(result_dir, "samples-prior.rds", sep=FS))
+          paste(parrams$config_dir, "samples-prior.rds", sep=FS))
 
 # chain plot
 prior_samples %>% filter(!startsWith(Parameter, "utts.")) %>% 
@@ -123,7 +120,6 @@ prior_samples %>%
 # then run RSA-model once with each sampled set of parameters
 params$sampled_params <- format_param_samples(prior_samples)[1:100,]
 params$verbose <- 0
-#params$utt_cost <- tibble(utterance = params$utterances, cost=params$utt_cost)
 rsa_data <- webppl(program_file = params$wppl_predictive_checks,
                    data = params,
                    data_var = "data",
@@ -141,7 +137,7 @@ prior_predictive <- rsa_data %>% imap(function(x, id){
                                                   utts.model.ifs,
                                                   utts.model.mights)))
 save_data(prior_predictive, 
-          paste(result_dir, "prior-predictive-alpha35.rds", sep=FS))
+          paste(parrams$config_dir, "prior-predictive.rds", sep=FS))
 # Plots -------------------------------------------------------------------
 model_utts = c("-A", "A", "-C", "C",
                "-C and -A", "-C and A", "C and -A", "C and A", 
@@ -236,7 +232,7 @@ pp %>% group_by(cat_alpha) %>% dplyr::count() %>% ungroup() %>%
   mutate(ratio = n/sum(n))
 
 # independent contexts
-trial <- "independent_uh"
+trial <- "independent_hh"
 ut <- "conjunction"
 df.obs <- obs.ind %>% filter(trial == !!trial & utt_type == ut)
 pp %>% filter(id==trial & utt_type == ut) %>%  #& utterance == "C and A") %>% 
@@ -250,7 +246,7 @@ pp %>% filter(id==trial & utt_type == ut) %>%  #& utterance == "C and A") %>%
   ggtitle(get_name_context(trial))
 
 #dependent contexts
-trial <- "if1_uh"
+trial <- "if2_hl"
 ut <- "conditional"
 df.obs <- obs.dep %>% filter(trial == !!trial & utt_type == ut) %>% 
   filter(utterance %in% c("A > C", "C > A", "-A > -C", "-C > -A"))
@@ -333,7 +329,7 @@ posterior_predictive <- data %>% imap(function(x, id){
   }) %>% bind_rows() %>% add_column(sample_id = id)
 }) %>% bind_rows()
 save_data(posterior_predictive, 
-          paste(result_dir, "posterior-predictive.rds", sep=FS))
+          paste(parrams$config_dir, "posterior-predictive.rds", sep=FS))
 
 predictives <- bind_rows(
   prior_predictive %>% add_column(distribution = "prior predictive"),
@@ -378,7 +374,7 @@ map(trials, function(trial){
     theme(axis.text.x = element_text(size=8), axis.text.y = element_text(size=8)) +
     scale_fill_brewer(name = "distribution", palette = "Set1") +
     labs(x = "predicted probability", y="count", title = get_name_context(trial))
-  ggsave(paste(result_dir, FS, "predictive-checks-", trial, ".png", sep=""), p,
+  ggsave(paste(parrams$config_dir, FS, "predictive-checks-", trial, ".png", sep=""), p,
          width = 10, height = 10)
 })
 

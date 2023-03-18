@@ -73,6 +73,7 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
     params$packages <- c(params$packages, pathes_extra_packages)
   }
   
+  ##### Observed data + rsa states + likelihoods ####
   # 3. retrieve observed data each participant and trial + ratios
   pars.observations <- get_observed_data(data.behav, params)
   # 4. draw samples from prior with cns specified above
@@ -82,12 +83,10 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
   
   # 6. join these into single list
   params <- c(params, pars.observations, pars.likelihoods, pars.rsa_states)
-  
   # 7. custom utterance cost
   if(!is.na(utt_costs)){
     params$utt_cost <- utt_costs
   }
-  
   # 8. prior relations (for context-weights)
   Sys.setenv(R_CONFIG_ACTIVE =  "priors_relations")
   par.relations <- config::get()
@@ -99,6 +98,38 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
     params <- c(params, par)
   }
   
+  # 9.create result dir for this configuration
+  config_dir <- paste(params$dir_results, FS, 
+                      config_weights_relations, "-", config_cns, "-", 
+                      params$nb_rsa_states, sep="")
+  if(!dir.exists(config_dir)) dir.create(config_dir)
+  params$config_dir <- config_dir
+  
+  
+  # 10. weights for each context and RSA-state
+  path_weights <- paste(config_dir, "weights_ci.rds", sep=FS)
+  if(file.exists(path_weights)) {
+    params$weights <- readRDS(path_weights)
+  } else {
+    # compute weights
+    weights_ci = run_webppl(params$wppl_weights, params) %>% 
+      bind_rows(.id = "id") %>% group_by(id) %>% arrange(desc(probs)) %>% 
+      unnest(c(support)) %>% 
+      unnest(c(table.probs, table.support)) %>% 
+      pivot_wider(names_from = table.support, values_from = table.probs) %>% 
+      group_by(id) %>% mutate(cdf = cumsum(probs)) %>% 
+      add_column(prior_r = config_weights_relations)
+    
+    params$weights <- weights_ci
+    save_data(weights_ci %>% add_column(n_rsa_states = params$nb_rsa_states),
+              paste(params$config_dir, "weights_ci.rds", sep = FS))
+    
+  }
+  # add weights with state-ids
+  params$p_s_ci = left_join(
+    params$weights %>% dplyr::select(-cn, -n_rsa_states), 
+    params$prior_samples
+  )
   return(params)
 }
 

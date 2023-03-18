@@ -92,7 +92,6 @@ weights = map(c("informative", "semi_informative"), function(prior_r){
   params <- prepare_data_for_wppl(config_cns, prior_r, 
                                   extra_packages = extra_packages)
   params$verbose <- FALSE
-  #params$prior_relations <- par_relations[[prior_r]]
   weights_ci = run_webppl("webppl-model/weights-contexts.wppl", params) %>% 
     bind_rows(.id = "id") %>% group_by(id) %>% arrange(desc(probs)) %>% 
     unnest(c(support)) %>% 
@@ -100,9 +99,9 @@ weights = map(c("informative", "semi_informative"), function(prior_r){
     pivot_wider(names_from = table.support, values_from = table.probs) %>% 
     group_by(id) %>% mutate(cdf = cumsum(probs)) %>% 
     add_column(prior_r = prior_r)
+  
   save_data(weights_ci %>% add_column(n_rsa_states = params$nb_rsa_states),
-            paste(params$dir_results, FS, "weights_ci_", prior_r, 
-                  params$nb_rsa_states, ".rds", sep=""))
+            paste(params$config_dir, "weights_ci.rds", sep = FS))
   return(weights_ci)
 }) %>% bind_rows() 
 
