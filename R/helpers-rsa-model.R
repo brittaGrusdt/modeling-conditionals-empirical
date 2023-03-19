@@ -34,6 +34,7 @@ get_assertable_utterances = function(tbls.wide, theta){
 # utt_costs is a tibble with columns 'utterance', 'cost'
 prepare_data_for_wppl <- function(config_cns = "default_cns", 
                                   config_weights_relations = "semi_informative",
+                                  config_speaker_type = "pragmatic",
                                   config_fits = NA,
                                   utt_costs = NA,
                                   extra_packages = NA
@@ -61,17 +62,21 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
     dplyr::select(prolific_id, id, utt.standardized, uc_task, pe_task, slider) %>% 
     translate_standardized2model() 
   
-  # 2. add default rsa parameters and custom packages
+  # 2. add default rsa parameters, speaker type and custom packages
   Sys.setenv(R_CONFIG_ACTIVE = "rsa_params")
   rsa_params <- config::get()
   params <- c(params, rsa_params)
-
+  
   if(!is.na(extra_packages)){
     pathes_extra_packages <- map_chr(extra_packages, function(name_pck){
       return(params[[name_pck]])
     })
     params$packages <- c(params$packages, pathes_extra_packages)
   }
+  
+  Sys.setenv(R_CONFIG_ACTIVE = "speaker_types")
+  pars.speaker <- config::get()
+  params$speaker_type <- pars.speaker[[config_speaker_type]]
   
   ##### Observed data + rsa states + likelihoods ####
   # 3. retrieve observed data each participant and trial + ratios
@@ -132,6 +137,14 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
   )
   return(params)
 }
+
+create_subconfig_folder_for_fitting <- function(config_dir, par_fit, speaker_type){
+  fn <- str_flatten(par_fit, collapse = "_")
+  subfolder <- paste(config_dir, fn, speaker_type, sep=FS)
+  if(!dir.exists(subfolder)) dir.create(subfolder)
+  return(subfolder)
+}
+
 
 # brings params in particular utterance cost into format expected by wppl
 format_param_samples = function(samples){

@@ -17,9 +17,11 @@ config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "semi_informative"
 config_fits <- "rsa_fit_params"
+config_speaker_type <- "pragmatic_utt_type"
 
 params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 config_fits = config_fits,
+                                config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
 
 mcmc_params <- tibble(n_samples = 2500, n_burn = 2500, n_lag = 5, n_chains = 4)
@@ -41,9 +43,12 @@ posterior_samples <- posterior %>% unnest(c(value)) %>%
   mutate(Chain = as.factor(Chain)) %>% 
   add_column(mcmc = list(mcmc_params), nb_rsa_states = params$nb_rsa_states)
 
-fn <- str_flatten(params$par_fit, collapse = "_")
-subfolder <- paste(params$config_dir, fn, sep=FS)
-if(!dir.exists(subfolder)) dir.create(subfolder)
+
+subfolder <- create_subconfig_folder_for_fitting(
+  config_dir = params$config_dir, 
+  par_fit = params$par_fit, 
+  speaker_type = params$speaker_type
+)
 save_data(posterior_samples %>% 
             add_column(config_prior_r = config_weights_relations, 
                        config_cns = config_cns), 

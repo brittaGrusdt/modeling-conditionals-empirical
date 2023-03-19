@@ -17,8 +17,10 @@ config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "semi_informative"
 config_fits <- "rsa_fit_params"
+config_speaker_type <- "pragmatic_utt_type"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
                                 config_fits = config_fits,
+                                config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
 
 # empirically observed data
@@ -121,7 +123,7 @@ prior_samples %>% pivot_wider(names_from="Parameter", values_from="value") %>%
   geom_density_2d_filled()
 
 # then run RSA-model once with each sampled set of parameters
-params$sampled_params <- format_param_samples(prior_samples)[1:100,]
+params$sampled_params <- format_param_samples(prior_samples)
 params$verbose <- 0
 rsa_data <- webppl(program_file = params$wppl_predictive_checks,
                    data = params,
@@ -296,15 +298,23 @@ weights.assertable_u %>% group_by(id) %>%
 
 
 # log likelihood plot
-pp.ll %>% ggplot(aes(x=theta, y=ll_ci, color=id, group=id)) +
-  geom_point() + geom_line() + labs(y="log likelihood data")
+pp.ll %>%
+  ggplot(aes(x=theta, y=ll_ci, color=id, group=id)) +
+  geom_point() + geom_line() + labs(y="log likelihood data") +
+  facet_wrap(~id, scales="free")
 
 
 # Posterior predictive ----------------------------------------------------
-subfolder <- paste(params$par_fit, collapse = "_")
+subfolder <- create_subconfig_folder_for_fitting(
+  config_dir = params$config_dir, 
+  par_fit = params$par_fit, 
+  speaker_type = params$speaker_type
+)
 # get samples from posterior distribution
 posterior_samples <- readRDS(here(params$config_dir, subfolder, "mcmc-posterior.rds"))
-params$sampled_params <- format_param_samples(posterior_samples)[1:100,]
+# just run rsa once for each identical parameter combination!
+params$sampled_params <- format_param_samples(posterior_samples) %>% 
+  distinct_at(vars(c(alpha, theta)), .keep_all = T)
 
 evs <- posterior_samples %>% group_by(Parameter) %>% 
   summarize(value = mean(value))
@@ -316,6 +326,7 @@ data <- webppl(program_file = params$wppl_predictive_checks,
                packages = params$packages)
 
 
+# TODO: add predictions as often as param combi occurred
 posterior_predictive <- data %>% imap(function(x, id){
   predictions <- as_tibble(x)
   df.predictions <- map(predictions, function(y){

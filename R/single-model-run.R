@@ -15,7 +15,10 @@ theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "semi_informative"
-params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
+config_speaker_type = "pragmatic_utt_type"
+params <- prepare_data_for_wppl(config_cns = config_cns, 
+                                config_weights_relations = config_weights_relations, 
+                                config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
 
 # set alpha and theta, otherwise default values used
