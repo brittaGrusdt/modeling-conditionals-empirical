@@ -47,6 +47,26 @@ labels_dep_contexts <- c(
   `if2_ul` = parse(text = expression("if"[2]*":UL"))
 ) 
 
+# for using label_parsed!
+names.contexts = list(
+  "if1_uh" = "'if'[1]*':UI'",
+  "if1_hh" = "'if'[1]*':HI'",
+  "if1_lh" = "'if'[1]*':LI'",
+  "if1_u-Lh" = "'if'[1]*':U'^-{}*'I'",
+  "if2_u-Ll" = "'if'[2]*':U'^-{}*'L'",
+  "if2_ul" = "'if'[1]*':UL'",
+  "if2_hl" = "'if'[2]*':HL'",
+  "if2_ll" = "'if'[2]*':LL'",
+  "independent_hh" = "ind:HH", 
+  "independent_ll" = "ind:LL", 
+  "independent_uh" = "ind:UH", 
+  "independent_ul" = "ind:UL", 
+  "independent_hl" = "ind:HL"
+)
+get_str_contexts = function(trial){
+  return(names.contexts[[trial]])
+}
+
 # functions ---------------------------------------------------------------
 plot_correlation = function(results.joint, 
                             color = "utterance", shape = "relation",

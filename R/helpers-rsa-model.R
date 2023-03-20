@@ -114,7 +114,7 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
   # 10. weights for each context and RSA-state
   path_weights <- paste(config_dir, "weights_ci.rds", sep=FS)
   if(file.exists(path_weights)) {
-    params$weights <- readRDS(path_weights)
+    params$weights <- readRDS(path_weights) %>% dplyr::select(-cn, -n_rsa_states)
   } else {
     # compute weights
     weights_ci = run_webppl(params$wppl_weights, params) %>% 
@@ -132,7 +132,7 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
   }
   # add weights with state-ids
   params$p_s_ci = left_join(
-    params$weights %>% dplyr::select(-cn, -n_rsa_states), 
+    params$weights, 
     params$prior_samples
   )
   return(params)
@@ -141,7 +141,7 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
 create_subconfig_folder_for_fitting <- function(config_dir, par_fit, speaker_type){
   fn <- str_flatten(par_fit, collapse = "_")
   subfolder <- paste(config_dir, fn, speaker_type, sep=FS)
-  if(!dir.exists(subfolder)) dir.create(subfolder)
+  if(!dir.exists(subfolder)) dir.create(subfolder, recursive = T)
   return(subfolder)
 }
 

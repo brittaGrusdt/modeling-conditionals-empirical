@@ -6,6 +6,8 @@ library(ExpDataWrangling)
 library(ModelUtils)
 library(stringr)
 library(tidybayes)
+library(ggpubr)
+library(ggdist)
 
 source(here("R", "helpers-plotting.R"))
 source(here("R", "helpers-load-data.R"))
@@ -43,7 +45,13 @@ obs.dep <- df.bootstrapped_uc_ratios_ci %>%
   mutate(utterance = utt.standardized) %>% 
   chunk_utterances() %>% 
   rename(utt_type = utterance, utterance = utt)
-  
+
+df.observed <- bind_rows(obs.ind, obs.dep)
+path_subfolder <- create_subconfig_folder_for_fitting(
+  config_dir = params$config_dir, 
+  par_fit = params$par_fit, 
+  speaker_type = params$speaker_type
+)
 # Prior predictive --------------------------------------------------------
 # condition statements are necessary to make sure that we can actually run 
 # the RSA-model with the sampled set of parameters!
@@ -142,7 +150,7 @@ prior_predictive <- rsa_data %>% imap(function(x, id){
                                                   utts.model.ifs,
                                                   utts.model.mights)))
 save_data(prior_predictive, 
-          paste(params$config_dir, "prior-predictive.rds", sep=FS))
+          paste(path_subfolder, "prior-predictive.rds", sep=FS))
 # Plots -------------------------------------------------------------------
 model_utts = c("-A", "A", "-C", "C",
                "-C and -A", "-C and A", "C and -A", "C and A", 
@@ -156,11 +164,6 @@ model_utt_labels =  c("¬b", "b", "¬g", "g",
                       "if b,g", "if g,b", "if b,¬g", "if ¬g,b",
                       "if ¬b,g", "if g, ¬b", "if ¬b,¬g", "if ¬g, ¬b"
 )
-
-medians.prior <- median_hdi(prior_predictive %>% group_by(id, utterance), p_hat) %>% 
-  distinct_at(vars(c(id, utterance, p_hat)))
-means.prior <- mean_hdi(prior_predictive %>% group_by(id, utterance), p_hat) %>%
-  distinct_at(vars(c(id, utterance, p_hat)))
 
 prior_pred.ind <- prior_predictive %>% filter(str_detect(id, "independent")) %>% 
   mutate(id = map_chr(id, get_name_context))
@@ -207,7 +210,9 @@ prior_predictive %>% filter(id==trial) %>%
   ggtitle(get_name_context(trial))
 
 # Predictions based on mean/median of parameters (from prior distributions)
-means.prior %>% mutate(p_hat = round(p_hat, 3)) %>% filter(p_hat > 0) %>% 
+hdis.mean_prior_predictive <- mean_hdi(prior_predictive %>% group_by(id, utterance), p_hat)
+hdis.mean_prior_predictive %>% distinct_at(vars(c(id, utterance, p_hat))) %>% 
+  mutate(p_hat = round(p_hat, 3)) %>% filter(p_hat > 0) %>% 
   mutate(utt=utterance, utterance=as.character(utterance)) %>%
   chunk_utterances() %>% 
   rename(utt_type=utterance, utterance=utt) %>% 
@@ -305,19 +310,15 @@ pp.ll %>%
 
 
 # Posterior predictive ----------------------------------------------------
-subfolder <- create_subconfig_folder_for_fitting(
-  config_dir = params$config_dir, 
-  par_fit = params$par_fit, 
-  speaker_type = params$speaker_type
-)
 # get samples from posterior distribution
-posterior_samples <- readRDS(here(params$config_dir, subfolder, "mcmc-posterior.rds"))
+posterior_samples <- readRDS(paste(path_subfolder, "mcmc-posterior.rds", sep=FS)) %>% 
+  format_param_samples() 
+evs <- posterior_samples %>% 
+  summarize(mean_alpha = mean(alpha), mean_theta = mean(theta))
 # just run rsa once for each identical parameter combination!
-params$sampled_params <- format_param_samples(posterior_samples) %>% 
+params$sampled_params <- posterior_samples %>% 
   distinct_at(vars(c(alpha, theta)), .keep_all = T)
 
-evs <- posterior_samples %>% group_by(Parameter) %>% 
-  summarize(value = mean(value))
 # then run RSA-model once with each sampled set of parameters
 data <- webppl(program_file = params$wppl_predictive_checks,
                data = params,
@@ -325,16 +326,25 @@ data <- webppl(program_file = params$wppl_predictive_checks,
                random_seed = params$seed_webppl,
                packages = params$packages)
 
-
-# TODO: add predictions as often as param combi occurred
-posterior_predictive <- data %>% imap(function(x, id){
+# add predictions as often as param combi occurred
+nb_occs <- posterior_samples %>% group_by(alpha, theta) %>% 
+  summarize(n = n(), .groups = "drop")
+posterior_predictive <- data %>% imap(function(x, sample_id){
   predictions <- as_tibble(x)
+  pars <- params$sampled_params %>% filter(sample_id == !!sample_id)
+  
   df.predictions <- map(predictions, function(y){
     as_tibble(y) %>% mutate(ll_ci = as.numeric(ll_ci))
-  }) %>% bind_rows() %>% add_column(sample_id = id)
+  }) %>% bind_rows() %>% add_column(sample_id = !!sample_id)
+  
+  n = nb_occs %>% filter(theta== pars$theta & alpha == pars$alpha) %>% pull(n)
+  if(n > 1){
+    df.predictions <- df.predictions %>% slice(rep(row_number(), n))
+  }
+  return(df.predictions)
 }) %>% bind_rows()
 save_data(posterior_predictive, 
-          paste(params$config_dir, subfolder, "posterior-predictive.rds", sep=FS))
+          paste(path_subfolder, "posterior-predictive.rds", sep=FS))
 
 predictives <- bind_rows(
   prior_predictive %>% add_column(distribution = "prior predictive"),
@@ -379,9 +389,94 @@ map(trials, function(trial){
     theme(axis.text.x = element_text(size=8), axis.text.y = element_text(size=8)) +
     scale_fill_brewer(name = "distribution", palette = "Set1") +
     labs(x = "predicted probability", y="count", title = get_name_context(trial))
-  ggsave(paste(params$config_dir, FS, subfolder, FS, 
+  ggsave(paste(path_subfolder, FS, 
                "predictive-checks-", trial, ".png", sep=""), 
          p, width = 10, height = 10)
+})
+
+# highest density intervals for posterior predictive 
+hdis.pp <- mean_hdi(posterior_predictive %>% group_by(id, utterance), p_hat) %>% 
+  rename(lower.pp = .lower, upper.pp = .upper, estimate.pp = p_hat) %>% 
+  dplyr::select(-.width, -.interval, -.point) %>% 
+  mutate(response = utterance) %>% translate_utterances() %>% 
+  rename(utt.standardized = response)
+hdis.pp.ind <- hdis.pp %>% filter(str_detect(id, "independent")) %>% 
+  mutate(label_id = map_chr(id, get_name_context))
+hdis.pp.dep <- hdis.pp %>%  filter(str_detect(id, "if")) %>% mutate(label_id = id)
+joint_data <- left_join(
+  bind_rows(hdis.pp.ind, hdis.pp.dep),
+  df.observed %>% 
+    dplyr::select(estimate, lower, upper, id, trial, utterance, utt.standardized) %>% 
+    rename(lower.emp = lower, upper.emp = upper, estimate.emp = estimate,
+           label_id = id, id = trial)
+) %>% mutate(estimate.emp = case_when(is.na(estimate.emp) ~ 0, T ~ estimate.emp),
+             lower.emp = case_when(is.na(lower.emp) ~ 0, T ~ lower.emp),
+             upper.emp = case_when(is.na(upper.emp) ~ 0, T ~ upper.emp)) %>% 
+  chunk_utterances()  %>% 
+  mutate(label_id = map_chr(id, get_str_contexts))
+                                
+
+
+utt_colors <- c(`both blocks fall` = "darkgoldenrod1", 
+                `blue falls but green does not fall` = "brown1", 
+                `green falls but blue does not fall` = "brown3",
+                `neither block falls` = "darkred", 
+                `blue falls` = "blue",
+                `green falls` = "green",
+                `blue does not fall` = "darkblue", 
+                `green does not fall` = "darkgreen",
+                `if blue falls green falls` = "orchid1",
+                `if green falls blue falls` = "mediumvioletred",
+                `if blue does not fall green does not fall` = "mediumpurple3",
+                `if green does not fall blue does not fall` = "mediumorchid", 
+                `if blue falls green does not fall` = "gray15",
+                `if green falls blue does not fall` = "gray30",
+                `if blue does not fall green falls` = "gray50",
+                `if green does not fall blue falls` = "gray80", 
+                `blue might fall` = "lightblue3",
+                `green might fall` = "lightgreen",
+                `blue might not fall` = "royalblue",
+                `green might not fall` = "seagreen"
+                )
+make_pred_plot = function(df.joint, n_facets){
+  p <- df.joint %>%
+    ggplot() +
+    geom_abline(intercept = 0, slope = 1, color="grey") +
+    geom_rect(mapping=aes(
+      xmin=lower.pp, xmax=upper.pp, 
+      ymin=lower.emp, ymax=upper.emp, 
+      fill=utt.standardized, 
+      color = utt.standardized
+      ), alpha=0.25) +
+    geom_errorbar(aes(x = estimate.pp, ymin = lower.emp, ymax = upper.emp), 
+                  color = 'black') +
+    geom_errorbarh(aes(y = estimate.emp, xmin = lower.pp, xmax = upper.pp), 
+                  color = 'black') +
+    geom_point(aes(x=estimate.pp, y=estimate.emp), alpha = 0.5) + 
+    scale_color_manual(name = "utterance", values = utt_colors) +
+    scale_fill_manual(name = "utterance", values = utt_colors) +
+    theme(legend.text = element_text(size=11), 
+          legend.title = element_text(size=11), 
+          axis.text.x = element_text(size = 11)) + 
+    facet_wrap(~label_id, ncol = n_facets, labeller = label_parsed) +
+    xlab("prediction") + ylab("data")
+  return(p)
+}
+prediction_plots_small <- map(c("if1", "if2", "independent"), function(rel){
+  ncol <- switch(rel, "if1"=4, "if2"=4, "independent"=5)
+  df.rel <- joint_data %>% filter(str_detect(id, rel))
+  p <- make_pred_plot(df.rel %>% filter(estimate.pp <= 0.1), ncol) 
+  ggsave(filename = paste(path_subfolder, FS, rel, "-small.png", sep=""),p)
+  return(p)
+})
+
+prediction_plots_large <- map(c("if1", "if2", "independent"), function(rel){
+  ncol <- switch(rel, "if1"=4, "if2"=4, "independent"=5)
+  df.rel <- joint_data %>% filter(str_detect(id, rel))
+  p <-  make_pred_plot(df.rel %>% filter(estimate.pp > 0.1), ncol) +
+    theme(legend.position = "none")
+  ggsave(filename = paste(path_subfolder, FS, rel, "-large.png", sep=""), p)
+  return(p)
 })
 
 

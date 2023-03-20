@@ -71,6 +71,7 @@ p.density_posterior = posterior_samples %>%
   geom_density() + 
   facet_wrap(~Parameter, scales = "free", labeller = label_both, ncol = 4) 
 p.density_posterior
+ggsave(here(subfolder, "density_posterior.png"), p.density_posterior)
 
 # posterior with highest density intervals
 p.posterior_hdis = posterior_samples %>% 
@@ -81,7 +82,7 @@ p.posterior_hdis = posterior_samples %>%
   theme(legend.position = "none") +
   labs(x="posterior value", y = "density")
 p.posterior_hdis
-ggsave(here(subfolder, "density_posterior.png"), p.posterior_hdis)
+ggsave(here(subfolder, "density_posterior_hdis.png"), p.posterior_hdis)
 
 # alpha vs. theta
 posterior_samples %>% filter(Parameter %in% c("alpha", "theta")) %>% 
