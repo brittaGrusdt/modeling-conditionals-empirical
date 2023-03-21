@@ -15,15 +15,15 @@ theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "semi_informative"
-config_speaker_type = "pragmatic_utt_type"
+#config_speaker_type = "pragmatic_utt_type"
+config_speaker_type = "random"
 params <- prepare_data_for_wppl(config_cns = config_cns, 
                                 config_weights_relations = config_weights_relations, 
                                 config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
-
 # set alpha and theta, otherwise default values used
-params$alpha <- 3.37
-params$theta <- 0.338
+params$alpha <- 4.53# 3.37
+params$theta <- 0.338 #0.338
 # params$gamma <- 1
 # params$utt_cost <- df.p_utts %>% dplyr::select(-p) %>% 
 #   pivot_wider(names_from="Parameter", values_from="value")
@@ -37,8 +37,8 @@ data <-   webppl(program_code = model,
                  random_seed = params$seed_webppl,
                  packages = params$packages
 )
-posterior <- data %>% map(function(x){as_tibble(x)})
-model.predictions <- posterior %>% 
+wppl_output <- data %>% map(function(x){as_tibble(x)})
+model.predictions <- wppl_output %>% 
   map(function(x){as_tibble(x) %>% mutate(ll_ci = as.numeric(ll_ci))}) %>% 
   bind_rows() %>% group_by(id) %>% 
   mutate(p_hat_round = round(p_hat, 2)) %>% 
@@ -61,7 +61,7 @@ plot_model_vs_data_bars(production.joint,
 ###############################################################################
 # new prediction based on repeatedly drawn N_participants states from 
 # weights to make rsa predictions
-# model.predictions <- posterior %>% bind_rows() %>% rowid_to_column() %>% 
+# model.predictions <-  wppl_output %>% bind_rows() %>% rowid_to_column() %>% 
 #   unnest(c(p_hat, utterance)) %>% 
 #   mutate(ll_ci = as.numeric(ll_ci)) %>% 
 #   arrange(id, p_hat)
