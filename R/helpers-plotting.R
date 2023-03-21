@@ -54,7 +54,7 @@ names.contexts = list(
   "if1_lh" = "'if'[1]*':LI'",
   "if1_u-Lh" = "'if'[1]*':U'^-{}*'I'",
   "if2_u-Ll" = "'if'[2]*':U'^-{}*'L'",
-  "if2_ul" = "'if'[1]*':UL'",
+  "if2_ul" = "'if'[2]*':UL'",
   "if2_hl" = "'if'[2]*':HL'",
   "if2_ll" = "'if'[2]*':LL'",
   "independent_hh" = "ind:HH", 
@@ -70,20 +70,20 @@ get_str_contexts = function(trial){
 # functions ---------------------------------------------------------------
 plot_correlation = function(results.joint, 
                             color = "utterance", shape = "relation",
-                            label.x = 0.1, label.y = NA){
+                            label.x = NA, label.y = 0.1){
   p_scatter = results.joint %>% 
-    ggscatter(x = "behavioral", y = "model", color = color, shape = shape,
+    ggscatter(y = "behavioral", x = "model", color = color, shape = shape,
               add = "reg.line", conf.int = TRUE, cor.method = "pearson", 
               xlab = "Empirical observations", ylab = "Model predictions") +
-      geom_point(size=1.5, aes_string(x="behavioral", y="model", 
+      geom_point(size=1.5, aes_string(y="behavioral", x="model", 
                                       color=color, shape=shape)) +
     guides(fill = "none")
-  if(!is.na(label.y)) {
+  if(!is.na(label.x)) {
     p_scatter <- p_scatter + 
       stat_cor(aes(color = color), label.x = label.x, label.y = label.y)
   } else {
     p_scatter <- p_scatter + 
-      stat_cor(aes(color = color), label.x = label.x)
+      stat_cor(aes(color = color), label.y = label.y)
   }
 
   return(p_scatter)
