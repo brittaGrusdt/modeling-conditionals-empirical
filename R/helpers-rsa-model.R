@@ -176,6 +176,70 @@ format_param_samples = function(samples){
 }
 
 
+# returns log likelihood for each context for Maximum a posteriori param values
+get_log_likelihood_MAP <- function(predictive, posterior_samples, speaker_type){
+  # log likelihood for MAP values
+  map_ll.id = predictive %>% group_by(idx) %>% 
+    distinct_at(vars(c(ll_ci, id, idx, sample_id))) %>% 
+    group_by(idx, sample_id) %>% 
+    summarize(summed_ll = sum(ll_ci), .groups = "drop") %>% arrange(summed_ll) %>% 
+    filter(summed_ll == max(summed_ll)) %>% 
+    pull(sample_id) %>% unique()
+  
+  map_ll.ci <- predictive %>% filter(sample_id == map_ll.id[1]) %>% 
+    dplyr::select(-idx, -utterance, -p_hat) %>% distinct() %>% 
+    add_column(speaker_model = speaker_type)
+  
+  # add corresponding model parameters
+  return(left_join(
+    map_ll.ci, 
+    posterior_samples %>% filter(sample_id == map_ll.id[1]) %>%
+      dplyr::select(alpha, theta, sample_id)
+  ))
+}
 
+
+get_ev_log_likelihood <- function(pp, speaker_type){
+  evs_ll <- pp %>% group_by(id) %>%
+    summarize(ev_ll.ci = mean(ll_ci)) %>% 
+    add_column(speaker_model = speaker_type) %>% 
+    arrange(ev_ll.ci)
+  return(evs_ll)
+}
+
+
+get_likelihoods_random_speaker <- function(config_cns, extra_packages,
+                                           config_weights_relations, 
+                                           config_fits) { 
+  config_speaker_type <- "random"
+  params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
+                                  config_fits = config_fits,
+                                  config_speaker_type = config_speaker_type,
+                                  extra_packages = extra_packages)
+  path_subfolder <- create_subconfig_folder_for_fitting(
+    config_dir = params$config_dir, 
+    par_fit = params$par_fit, 
+    speaker_type = params$speaker_type
+  )
+  
+  fn_ll_MAP <- paste(path_subfolder, "MAP-log-likelihood-ci.csv", sep=FS)
+  if(file.exists(fn_ll_MAP)){
+    map_ll <- read_csv(fn_ll_MAP)
+  } else {
+    message("write csv file...")
+    prior_samples <- readRDS(paste(params$config_dir, "samples-prior.rds", sep=FS))
+    prior_predictive <- readRDS(paste(path_subfolder, "prior-predictive.rds", sep=FS))
+    posterior_samples <- prior_samples %>% format_param_samples() %>%
+      group_by(alpha, theta) %>% rename(idx = rowid)
+    posterior_predictive <- prior_predictive %>% group_by(sample_id)
+    posterior_predictive$idx <- group_indices(posterior_predictive)
+    # log likelihood for MAP values
+    map_ll <- get_log_likelihood_MAP(posterior_predictive, 
+                                     posterior_samples,
+                                     config_speaker_type)
+    write_csv(map_ll, paste(path_subfolder, "MAP-log-likelihood-ci.csv", sep=FS))
+  }
+  return(map_ll)
+}
 
 
