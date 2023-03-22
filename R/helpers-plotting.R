@@ -70,7 +70,7 @@ get_str_contexts = function(trial){
 # functions ---------------------------------------------------------------
 plot_correlation = function(results.joint, 
                             color = "utterance", shape = "relation",
-                            label.x = NA, label.y = 0.1){
+                            label.x = NA, label.y = 0.6){
   p_scatter = results.joint %>% 
     ggscatter(y = "behavioral", x = "model", color = color, shape = shape,
               add = "reg.line", conf.int = TRUE, cor.method = "pearson", 

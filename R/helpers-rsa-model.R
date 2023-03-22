@@ -112,7 +112,8 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
   
   
   # 10. weights for each context and RSA-state
-  path_weights <- paste(config_dir, "weights_ci.rds", sep=FS)
+  fn_weights <- "weights_ci.rds"
+  path_weights <- paste(config_dir, fn_weights, sep=FS)
   if(file.exists(path_weights)) {
     params$weights <- readRDS(path_weights) %>% dplyr::select(-cn, -n_rsa_states)
   } else {
@@ -127,7 +128,7 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
     
     params$weights <- weights_ci
     save_data(weights_ci %>% add_column(n_rsa_states = params$nb_rsa_states),
-              paste(params$config_dir, "weights_ci.rds", sep = FS))
+              path_weights)
     
   }
   # add weights with state-ids

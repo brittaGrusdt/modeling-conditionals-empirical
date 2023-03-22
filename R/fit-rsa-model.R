@@ -24,6 +24,14 @@ params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
 
+###############################################################################
+# only model frequently used utterances to see whether literal model 
+# then improves wrt to random speaker model
+# only_freq_ratios = params$observed_utts_ratios %>% 
+#   mutate(n = case_when(ratio < 0.05 ~ 0, T ~ n)) %>% 
+#   group_by(id) %>% mutate(ratio = n/sum(n))
+# params$observed_utts_ratios <- only_freq_ratios
+###############################################################################
 mcmc_params <- tibble(n_samples = 2500, n_burn = 2500, n_lag = 5, n_chains = 4)
 posterior <- webppl(program_file = params$wppl_fit_rsa, 
                     data_var = "data",
@@ -49,6 +57,7 @@ subfolder <- create_subconfig_folder_for_fitting(
   par_fit = params$par_fit, 
   speaker_type = params$speaker_type
 )
+# path_subfolder <- paste(path_subfolder, "only-frequent-data", sep=FS)
 save_data(posterior_samples %>% 
             add_column(config_prior_r = config_weights_relations, 
                        config_cns = config_cns), 

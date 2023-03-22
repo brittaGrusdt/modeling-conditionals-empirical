@@ -15,8 +15,8 @@ theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "semi_informative"
-#config_speaker_type = "pragmatic_utt_type"
-config_speaker_type = "random"
+config_speaker_type = "pragmatic_utt_type"
+#config_speaker_type = "random"
 params <- prepare_data_for_wppl(config_cns = config_cns, 
                                 config_weights_relations = config_weights_relations, 
                                 config_speaker_type = config_speaker_type,
@@ -44,6 +44,8 @@ model.predictions <- wppl_output %>%
   mutate(p_hat_round = round(p_hat, 2)) %>% 
   arrange(desc(p_hat))
 
+model.predictions %>% dplyr::select(ll_ci, id) %>% distinct() %>% 
+  arrange(desc(ll_ci))
 
 production.joint = left_join(model.predictions, 
                              params$observed_utts_ratios %>% rename(p = ratio)) %>% 

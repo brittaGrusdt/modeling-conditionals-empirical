@@ -326,11 +326,12 @@ pp.ll %>%
 # get samples from posterior distribution
 posterior_samples <- readRDS(paste(path_subfolder, "mcmc-posterior.rds", sep=FS)) %>% 
   format_param_samples() 
-evs <- posterior_samples %>% 
-  summarize(mean_alpha = mean(alpha), mean_theta = mean(theta))
+# expected values
+posterior_samples %>% summarize(mean_alpha = mean(alpha), mean_theta = mean(theta))
 # just run rsa once for each identical parameter combination!
 params$sampled_params <- posterior_samples %>% 
-  distinct_at(vars(c(alpha, theta)), .keep_all = T)
+  distinct_at(vars(c(alpha, theta)), .keep_all = T) %>% 
+  dplyr::select(-rowid) %>% rowid_to_column()
 
 # then run RSA-model once with each sampled set of parameters
 data <- webppl(program_file = params$wppl_predictive_checks,
