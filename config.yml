@@ -71,9 +71,10 @@ speaker_types:
   pragmatic: "pragmatic"
   literal: "literal"
   random: "random"
-   
-rsa_fit_params:
-  par_fit: !expr c("alpha", "theta") # , "utt_cost", "gamma"
+
+par_fit:
+  alpha_theta: !expr c("alpha", "theta") # , "utt_cost"
+  alpha_theta_gamma: !expr c("alpha", "theta", "gamma")
   #use_drift_kernel: TRUE
 
 

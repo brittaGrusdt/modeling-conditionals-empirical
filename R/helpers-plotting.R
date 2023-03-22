@@ -8,6 +8,29 @@ utts.model.literals = c("A", "-A", "C", "-C")
 utts.model.mights = c("might A", "might -A", "might C", "might -C")
 utts.model.conjs = c("C and A", "C and -A", "-C and A", "-C and -A")
 
+
+# mapping utterances to colors --------------------------------------------
+UTT_COLORS <- c(`both blocks fall` = "darkgoldenrod1", 
+                `blue falls but green does not fall` = "brown1", 
+                `green falls but blue does not fall` = "brown3",
+                `neither block falls` = "darkred", 
+                `blue falls` = "blue",
+                `green falls` = "green",
+                `blue does not fall` = "darkblue", 
+                `green does not fall` = "darkgreen",
+                `if blue falls green falls` = "orchid1",
+                `if green falls blue falls` = "mediumvioletred",
+                `if blue does not fall green does not fall` = "mediumpurple3",
+                `if green does not fall blue does not fall` = "mediumorchid", 
+                `if blue falls green does not fall` = "gray15",
+                `if green falls blue does not fall` = "gray30",
+                `if blue does not fall green falls` = "gray50",
+                `if green does not fall blue falls` = "gray80", 
+                `blue might fall` = "lightblue3",
+                `green might fall` = "lightgreen",
+                `blue might not fall` = "royalblue",
+                `green might not fall` = "seagreen"
+)
 # context names -----------------------------------------------------------
 get_dep_context_expression = function(trial_id){
   expr <- switch(trial_id,
@@ -68,24 +91,27 @@ get_str_contexts = function(trial){
 }
 
 # functions ---------------------------------------------------------------
-plot_correlation = function(results.joint, 
-                            color = "utterance", shape = "relation",
-                            label.x = NA, label.y = 0.6){
+plot_correlation = function(results.joint, label.x = NA, label.y = 0.6){
   p_scatter = results.joint %>% 
-    ggscatter(y = "behavioral", x = "model", color = color, shape = shape,
+    ggscatter(y = "behavioral", x = "model", 
               add = "reg.line", conf.int = TRUE, cor.method = "pearson", 
-              xlab = "Empirical observations", ylab = "Model predictions") +
-      geom_point(size=1.5, aes_string(y="behavioral", x="model", 
-                                      color=color, shape=shape)) +
-    guides(fill = "none")
+              ylab = "Data", xlab = "Predictions") +
+    geom_point(size=1.5, aes_string(y="behavioral", x="model", 
+                                    color = "utterance", 
+                                    fill = "utterance")) +
+    geom_abline(intercept = 0, slope = 1, color="grey") +
+    theme_minimal(base_size=20) + 
+    theme(legend.position = "top") +
+    guides(fill = guide_legend(title.position = "top"), 
+           color = guide_legend(title.position = "top")) +
+    facet_wrap(~label_id, labeller = label_parsed) +
+    scale_color_manual(name = "utterance", values = UTT_COLORS) +
+    scale_fill_manual(name = "utterance", values = UTT_COLORS) 
   if(!is.na(label.x)) {
-    p_scatter <- p_scatter + 
-      stat_cor(aes(color = color), label.x = label.x, label.y = label.y)
+    p_scatter <- p_scatter + stat_cor(label.x = label.x, label.y = label.y)
   } else {
-    p_scatter <- p_scatter + 
-      stat_cor(aes(color = color), label.y = label.y)
+    p_scatter <- p_scatter + stat_cor(label.y = label.y)
   }
-
   return(p_scatter)
 }
 

@@ -19,7 +19,7 @@ theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "semi_informative"
-config_fits <- "rsa_fit_params"
+config_fits <- "alpha_theta"
 config_speaker_type <- "pragmatic_utt_type"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
                                 config_fits = config_fits,
@@ -442,28 +442,6 @@ joint_data <- left_join(
   mutate(label_id = map_chr(id, get_str_contexts))
                                 
 
-
-utt_colors <- c(`both blocks fall` = "darkgoldenrod1", 
-                `blue falls but green does not fall` = "brown1", 
-                `green falls but blue does not fall` = "brown3",
-                `neither block falls` = "darkred", 
-                `blue falls` = "blue",
-                `green falls` = "green",
-                `blue does not fall` = "darkblue", 
-                `green does not fall` = "darkgreen",
-                `if blue falls green falls` = "orchid1",
-                `if green falls blue falls` = "mediumvioletred",
-                `if blue does not fall green does not fall` = "mediumpurple3",
-                `if green does not fall blue does not fall` = "mediumorchid", 
-                `if blue falls green does not fall` = "gray15",
-                `if green falls blue does not fall` = "gray30",
-                `if blue does not fall green falls` = "gray50",
-                `if green does not fall blue falls` = "gray80", 
-                `blue might fall` = "lightblue3",
-                `green might fall` = "lightgreen",
-                `blue might not fall` = "royalblue",
-                `green might not fall` = "seagreen"
-                )
 make_pred_plot = function(df.joint, n_facets){
   p <- df.joint %>%
     ggplot() +
@@ -480,8 +458,8 @@ make_pred_plot = function(df.joint, n_facets){
                   color = 'black', height=0) +
     geom_point(aes(x=estimate.pp, y=estimate.emp, color=utt.standardized), 
                alpha = 0.5, size=3) + 
-    scale_color_manual(name = "utterance", values = utt_colors) +
-    scale_fill_manual(name = "utterance", values = utt_colors) +
+    scale_color_manual(name = "utterance", values = UTT_COLORS) +
+    scale_fill_manual(name = "utterance", values = UTT_COLORS) +
     theme(legend.text = element_text(size=20), 
           legend.title = element_text(size=20),
           strip.text.x = element_text(size = 20),
@@ -492,31 +470,6 @@ make_pred_plot = function(df.joint, n_facets){
     xlab("prediction") + ylab("data")
   return(p)
 }
-# prediction_plots_small <- map(c("if1", "if2", "independent"), function(rel){
-#   ncol <- switch(rel, "if1"=4, "if2"=4, "independent"=5)
-#   df.rel <- joint_data %>% filter(str_detect(id, rel))
-#   p <- make_pred_plot(df.rel %>% filter(estimate.pp <= 0.1), ncol) +
-#     theme(axis.text.x = element_text(size = 18))
-#   # save legend separately once
-#   if(rel == "if1"){
-#     legend <- cowplot::get_legend(p)
-#     ggsave(filename = paste(path_subfolder, FS, "utterances-legend.png", sep=""), 
-#            legend, width=21, height=2)
-#   }
-#   p <- p + theme(legend.position = "none")
-#   ggsave(filename = paste(path_subfolder, FS, rel, "-small.png", sep=""), p, 
-#          width=21, height=8)
-#   return(p)
-# })
-# prediction_plots_large <- map(c("if1", "if2", "independent"), function(rel){
-#   ncol <- switch(rel, "if1"=4, "if2"=4, "independent"=5)
-#   df.rel <- joint_data %>% filter(str_detect(id, rel))
-#   p <-  make_pred_plot(df.rel %>% filter(estimate.pp > 0.1), ncol) +
-#     theme(legend.position = "none")
-#   ggsave(filename = paste(path_subfolder, FS, rel, "-large.png", sep=""), p, 
-#          width=17, height=6)
-#   return(p)
-# })
 
 prediction_plots_all <- map(c("if1", "if2", "independent"), function(rel){
   ncol <- switch(rel, "if1"=4, "if2"=4, "independent"=5)

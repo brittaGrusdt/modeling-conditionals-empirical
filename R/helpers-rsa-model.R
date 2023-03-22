@@ -98,9 +98,9 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
   params$prior_relations <- par.relations[[config_weights_relations]]
   
   if(!is.na(config_fits)){
-    Sys.setenv(R_CONFIG_ACTIVE = config_fits)
+    Sys.setenv(R_CONFIG_ACTIVE = "par_fit")
     par = config::get()
-    params <- c(params, par)
+    params$par_fit <- par[[config_fits]]
   }
   
   # 9.create result dir for this configuration

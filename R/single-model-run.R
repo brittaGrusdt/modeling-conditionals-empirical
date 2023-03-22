@@ -16,15 +16,14 @@ config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "semi_informative"
 config_speaker_type = "pragmatic_utt_type"
-#config_speaker_type = "random"
 params <- prepare_data_for_wppl(config_cns = config_cns, 
                                 config_weights_relations = config_weights_relations, 
                                 config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
 # set alpha and theta, otherwise default values used
-params$alpha <- 4.53# 3.37
-params$theta <- 0.338 #0.338
-# params$gamma <- 1
+params$alpha <- 2.29
+params$theta <- 0.859
+params$gamma <- 0.296
 # params$utt_cost <- df.p_utts %>% dplyr::select(-p) %>% 
 #   pivot_wider(names_from="Parameter", values_from="value")
 
@@ -52,9 +51,22 @@ production.joint = left_join(model.predictions,
   rename(model = p_hat, behavioral = p) %>% 
   mutate(relation = case_when(startsWith(id, "independent") ~ "independent", 
                               startsWith(id, "if1") ~ "if1",
-                              startsWith(id, "if2") ~ "if2"))
+                              startsWith(id, "if2") ~ "if2")) %>% 
+  mutate(label_id = map_chr(id, get_str_contexts)) %>% 
+  mutate(response = utterance) %>% 
+  translate_utterances() %>% 
+  rename(utt = utterance, utterance = response)
 
-plot_correlation(production.joint, color = "id") + facet_wrap(~id)
+p.corr = plot_correlation(production.joint)
+ggsave(paste(params$config_dir, FS,
+             "alpha_theta_gamma", FS,
+             params$speaker_type, FS, 
+             "corr-plot-single-run_alpha-", params$alpha, 
+             "-theta-", params$theta, 
+             "-gamma-", params$gamma, 
+             ".png", sep=""), 
+       p.corr, 
+       width = 21, height = 10)
 plot_model_vs_data_bars(production.joint, 
                         str_flatten(c("alpha", params$alpha, "theta", 
                                       params$theta), collapse="_"), 

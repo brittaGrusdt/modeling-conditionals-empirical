@@ -16,15 +16,15 @@ theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "semi_informative"
-config_fits <- "rsa_fit_params"
-config_speaker_type <- "literal" # "pragmatic_utt_type"
+config_fits <- "alpha_theta_gamma"
+config_speaker_type <-"pragmatic_utt_type"
 
 params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 config_fits = config_fits,
                                 config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
 
-mcmc_params <- tibble(n_samples = 2500, n_burn = 2500, n_lag = 5, n_chains = 4)
+mcmc_params <- tibble(n_samples = 2500, n_burn = 5000, n_lag = 5, n_chains = 4)
 posterior <- webppl(program_file = params$wppl_fit_rsa, 
                     data_var = "data",
                     model_var = "non_normalized_posterior",
@@ -74,6 +74,9 @@ p.density_posterior
 ggsave(here(subfolder, "density_posterior.png"), p.density_posterior)
 
 # posterior with highest density intervals
+hdis.mean_posterior <- mean_hdi(posterior_samples %>% group_by(Parameter), value)
+hdis.mean_posterior
+
 p.posterior_hdis = posterior_samples %>% 
   filter(Parameter %in% c("alpha", "theta")) %>% 
   ggplot(aes(x = value, fill = Parameter)) +
