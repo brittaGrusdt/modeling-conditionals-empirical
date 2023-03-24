@@ -46,10 +46,10 @@ rsa_params:
   theta_shape2: 2
   theta_might_shape1: 2
   theta_might_shape2: 2
-  gamma_a: 0
-  gamma_b: 1
+  gamma_a: 2
+  gamma_b: 2
   cost_lambda: 8
-  # likelihoods for generating states default prior
+  # likelihoods for generating RSA-states
   conditional_probs: !expr tibble::tribble(~grp, ~variable, ~shape1, ~shape2,
                                          "high", "causal_power", 10, 1,
                                          "high", "noise", 10, 1,
@@ -163,6 +163,7 @@ priors_relations:
   informative: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context",1, 0, 0, 0, 0, "if1", 0.9, 0.1, 0, 0, 0, "if2", 0, 0, 0, 0, 1, "independent")
   semi_informative: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context", 1/8, 1/8, 1/8, 1/8, 0.5, "if1",  1/8, 1/8, 1/8, 1/8, 0.5, "if2",  0, 0, 0, 0, 1, "independent")
   quite_informative: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context", 1/3, 1/6, 1/3, 1/6, 0, "if1",  1/3, 1/6, 1/3, 1/6, 0, "if2",  0, 0, 0, 0, 1, "independent")
+  flat_dependent: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context", 1/4, 1/4, 1/4, 1/4, 0, "if1",  1/4, 1/4, 1/4, 1/4, 0, "if2",  0, 0, 0, 0, 1, "independent")
 
 
 # there needs to be 1 blank final line!

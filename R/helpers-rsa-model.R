@@ -97,19 +97,27 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
   par.relations <- config::get()
   params$prior_relations <- par.relations[[config_weights_relations]]
   
-  if(!is.na(config_fits)){
-    Sys.setenv(R_CONFIG_ACTIVE = "par_fit")
-    par = config::get()
-    params$par_fit <- par[[config_fits]]
-  }
-  
-  # 9.create result dir for this configuration
+  # 9.create result directories for this configuration
   config_dir <- paste(params$dir_results, FS, 
                       config_weights_relations, "-", config_cns, "-", 
                       params$nb_rsa_states, sep="")
   if(!dir.exists(config_dir)) dir.create(config_dir)
   params$config_dir <- config_dir
   
+  if(!is.na(config_fits)){
+    Sys.setenv(R_CONFIG_ACTIVE = "par_fit")
+    par = config::get()
+    params$par_fit <- par[[config_fits]]
+    
+    sp_subfolder <- create_subconfig_folder_for_fitting(
+      config_dir = config_dir, 
+      par_fit = params$par_fit, 
+      speaker_type = config_speaker_type
+    )
+    params$speaker_subfolder <- sp_subfolder
+    params$fit_dir <- str_replace(sp_subfolder, 
+                                  paste(FS, config_speaker_type, sep=""), "")
+  }
   
   # 10. weights for each context and RSA-state
   fn_weights <- "weights_ci.rds"

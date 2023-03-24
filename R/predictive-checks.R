@@ -18,14 +18,13 @@ theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 # Setup -------------------------------------------------------------------
 config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
-config_weights_relations = "semi_informative"
-config_fits <- "alpha_theta"
+config_weights_relations = "flat_dependent"
+config_fits <- "alpha_theta_gamma"
 config_speaker_type <- "pragmatic_utt_type"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
                                 config_fits = config_fits,
                                 config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
-
 
 # empirically observed data
 df.bootstrapped_uc_ratios_ci <- readRDS(params$bootstrapped_ci_ratios) %>% 
@@ -49,11 +48,6 @@ obs.dep <- df.bootstrapped_uc_ratios_ci %>%
   rename(utt_type = utterance, utterance = utt)
 
 df.observed <- bind_rows(obs.ind, obs.dep)
-path_subfolder <- create_subconfig_folder_for_fitting(
-  config_dir = params$config_dir, 
-  par_fit = params$par_fit, 
-  speaker_type = params$speaker_type
-)
 
 # Prior predictive --------------------------------------------------------
 # condition statements are necessary to make sure that we can actually run 
@@ -84,28 +78,33 @@ var model_prior = function(){
 }
 "
 
-mcmc_params <- tibble(n_samples = 1000, n_burn = 1000, n_lag = 15, n_chains = 4)
-# get samples from prior distribution
-prior_samples <- webppl(
-  program_code = model,
-  data = params,
-  data_var = "data",
-  model_var = "model_prior",
-  inference_opts = list(method = "incrementalMH",
-                        samples = mcmc_params$n_samples,
-                        burn = mcmc_params$n_burn,
-                        lag = mcmc_params$n_lag,
-                        verbose = T),
-  packages = params$packages, 
-  chains = mcmc_params$n_chains, 
-  cores = mcmc_params$n_chains
-  ) %>% as_tibble() %>% 
-  mutate(Parameter = as.character(Parameter), 
-         Parameter = str_replace(Parameter, "utt_cost", "utts"), 
-         Chain = as.factor(Chain))
-save_data(prior_samples %>% add_column(n_burn = mcmc_params$n_burn, 
-                                       n_lag = mcmc_params$n_lag), 
-          paste(params$config_dir, "samples-prior.rds", sep=FS))
+path_prior_samples <- paste(params$fit_dir, "samples-prior.rds", sep=FS)
+if(!file.exists(path_prior_samples)){
+  mcmc_params <- tibble(n_samples = 1000, n_burn = 1000, n_lag = 15, n_chains = 4)
+  # get samples from prior distribution
+  prior_samples <- webppl(
+    program_code = model,
+    data = params,
+    data_var = "data",
+    model_var = "model_prior",
+    inference_opts = list(method = "incrementalMH",
+                          samples = mcmc_params$n_samples,
+                          burn = mcmc_params$n_burn,
+                          lag = mcmc_params$n_lag,
+                          verbose = T),
+    packages = params$packages, 
+    chains = mcmc_params$n_chains, 
+    cores = mcmc_params$n_chains
+    ) %>% as_tibble() %>% 
+    mutate(Parameter = as.character(Parameter), 
+           Parameter = str_replace(Parameter, "utt_cost", "utts"), 
+           Chain = as.factor(Chain))
+  save_data(prior_samples %>% add_column(n_burn = mcmc_params$n_burn, 
+                                         n_lag = mcmc_params$n_lag), 
+            path_prior_samples)
+} else {
+  prior_samples <- readRDS(path_prior_samples)
+}
 
 # chain plot
 prior_samples %>% filter(!startsWith(Parameter, "utts.")) %>% 
@@ -133,7 +132,8 @@ prior_samples %>% pivot_wider(names_from="Parameter", values_from="value") %>%
   ggplot(aes(x=alpha, y=theta)) + 
   geom_density_2d_filled()
 
-# then run RSA-model once with each sampled set of parameters
+
+# then run RSA-model once with each sampled set of parameters -------------
 params$sampled_params <- format_param_samples(prior_samples)
 params$verbose <- 0
 
@@ -160,8 +160,8 @@ prior_predictive <- rsa_data %>% imap(function(x, id){
   group_by(sample_id)
 prior_predictive$idx <- group_indices(prior_predictive)
 save_data(prior_predictive, 
-          paste(path_subfolder, "prior-predictive.rds", sep=FS))
-# prior_predictive <- readRDS(paste(path_subfolder, "prior-predictive.rds", sep=FS))
+          paste(params$speaker_subfolder, "prior-predictive.rds", sep=FS))
+# prior_predictive <- readRDS(paste(params$speaker_subfolder, "prior-predictive.rds", sep=FS))
 
 # Plots -------------------------------------------------------------------
 model_utts = c("-A", "A", "-C", "C",
@@ -281,7 +281,7 @@ pp %>% filter(id==trial & utt_type == ut) %>%
 # Log likelihoods ---------------------------------------------------------
 pp.ll = pp %>% distinct_at(vars(c(id, alpha, theta, ll_ci))) 
 
-# only for independent conrtexts ll becomes -Inf
+# for which contexts does ll become -Inf
 pp.ll %>% filter(is.infinite(ll_ci)) %>% pull(id) %>% unique()
 
 pp.ll %>% filter(str_detect(id, "independent") & !is.infinite(ll_ci)) %>% 
@@ -299,7 +299,6 @@ pp %>%
   filter(p_hat == 0)
 
 # are there any dependent contexts where any utterance is predicted with probab. 0?
-# NO
 pp %>% dplyr::select(id, p_hat, utterance) %>% filter(str_detect(id, "if")) %>% 
   filter(p_hat == 0)
 
@@ -324,7 +323,7 @@ pp.ll %>%
 
 # Posterior predictive ----------------------------------------------------
 # get samples from posterior distribution
-posterior_samples <- readRDS(paste(path_subfolder, "mcmc-posterior.rds", sep=FS)) %>% 
+posterior_samples <- readRDS(paste(params$speaker_subfolder, "mcmc-posterior.rds", sep=FS)) %>% 
   format_param_samples() 
 # expected values
 posterior_samples %>% summarize(mean_alpha = mean(alpha), mean_theta = mean(theta))
@@ -340,7 +339,7 @@ data <- webppl(program_file = params$wppl_predictive_checks,
                random_seed = params$seed_webppl,
                packages = params$packages)
 save_data(data, 
-          paste(path_subfolder, "posterior-predictive-wppl-output.rds", sep=FS))
+          paste(params$speaker_subfolder, "posterior-predictive-wppl-output.rds", sep=FS))
 
 # add predictions as often as param combi occurred
 nb_occs <- posterior_samples %>% group_by(alpha, theta) %>% 
@@ -367,10 +366,9 @@ posterior_predictive <- data %>% imap(function(x, sample_id){
   return(df.predictions)
 }) %>% bind_rows()
 save_data(posterior_predictive, 
-          paste(path_subfolder, "posterior-predictive.rds", sep=FS))
-posterior_predictive <- readRDS(paste(path_subfolder, "posterior-predictive.rds",
-                                      sep=FS))
-
+          paste(params$speaker_subfolder, "posterior-predictive.rds", sep=FS))
+# posterior_predictive <- readRDS(paste(params$speaker_subfolder, "posterior-predictive.rds",
+#                                       sep=FS))
 
 predictives <- bind_rows(
   prior_predictive %>% add_column(distribution = "prior predictive"),
@@ -415,7 +413,7 @@ map(trials, function(trial){
     theme(axis.text.x = element_text(size=8), axis.text.y = element_text(size=8)) +
     scale_fill_brewer(name = "distribution", palette = "Set1") +
     labs(x = "predicted probability", y="count", title = get_name_context(trial))
-  ggsave(paste(path_subfolder, FS, 
+  ggsave(paste(params$speaker_subfolder, FS, 
                "predictive-checks-", trial, ".png", sep=""), 
          p, width = 10, height = 10)
 })
@@ -479,11 +477,11 @@ prediction_plots_all <- map(c("if1", "if2", "independent"), function(rel){
   # save legend separately once
   if(rel == "if1"){
     legend <- cowplot::get_legend(p)
-    ggsave(filename = paste(path_subfolder, FS, "utterances-legend.png", sep=""),
+    ggsave(filename = paste(params$speaker_subfolder, FS, "utterances-legend.png", sep=""),
            legend, width=21, height=2)
   }
   p <- p + theme(legend.position = "none")
-  ggsave(filename = paste(path_subfolder, FS, rel, ".png", sep=""), p, 
+  ggsave(filename = paste(params$speaker_subfolder, FS, rel, ".png", sep=""), p, 
          width=21, height=6)
   return(p)
 })
@@ -492,17 +490,17 @@ prediction_plots_all <- map(c("if1", "if2", "independent"), function(rel){
 # Log likelihoods ---------------------------------------------------------
 posterior_predictive.ll = posterior_predictive %>%
   distinct_at(vars(c(id, ll_ci, sample_id, idx))) 
-save_data(posterior_predictive.ll, paste(path_subfolder, 
+save_data(posterior_predictive.ll, paste(params$speaker_subfolder, 
                                          "posterior_predictive_ll.rds", 
                                          sep=FS))
 # expected log likelihoods posterior
 evs_ll <- get_ev_log_likelihood(posterior_predictive, config_speaker_type)
-write_csv(evs_ll, paste(path_subfolder, "evs-log-likelihood-ci.csv", sep=FS))
+write_csv(evs_ll, paste(params$speaker_subfolder, "evs-log-likelihood-ci.csv", sep=FS))
 # log likelihood for MAP values
 map_ll <- get_log_likelihood_MAP(posterior_predictive, 
                                  posterior_samples,
                                  config_speaker_type)
-write_csv(map_ll, paste(path_subfolder, "MAP-log-likelihood-ci.csv", sep=FS))
+write_csv(map_ll, paste(params$speaker_subfolder, "MAP-log-likelihood-ci.csv", sep=FS))
 
 # Evidence models
 # integral P(D|M, theta) * P(theta)
@@ -512,7 +510,7 @@ evidence_model = posterior_predictive %>%
   dplyr::select(ll_ci, id, idx) %>% distinct() %>% 
   group_by(idx) %>% summarize(ll = sum(ll_ci)) %>% 
   summarize(evidence = mean(ll))
-write_csv(evidence_model, paste(path_subfolder, "evidence_model.csv", sep=FS))
+write_csv(evidence_model, paste(params$speaker_subfolder, "evidence_model.csv", sep=FS))
 
 
 # Plots across speaker types ----------------------------------------------
