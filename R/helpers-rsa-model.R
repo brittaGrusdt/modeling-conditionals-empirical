@@ -186,7 +186,8 @@ format_param_samples = function(samples){
 
 
 # returns log likelihood for each context for Maximum a posteriori param values
-get_log_likelihood_MAP <- function(predictive, posterior_samples, speaker_type){
+get_log_likelihood_MAP <- function(predictive, posterior_samples, speaker_type, 
+                                   free_model_pars){
   # log likelihood for MAP values
   map_ll.id = predictive %>% group_by(idx) %>% 
     distinct_at(vars(c(ll_ci, id, idx, sample_id))) %>% 
@@ -203,7 +204,7 @@ get_log_likelihood_MAP <- function(predictive, posterior_samples, speaker_type){
   return(left_join(
     map_ll.ci, 
     posterior_samples %>% filter(sample_id == map_ll.id[1]) %>%
-      dplyr::select(alpha, theta, sample_id)
+      dplyr::select(all_of(free_model_pars), sample_id)
   ))
 }
 
@@ -225,19 +226,14 @@ get_likelihoods_random_speaker <- function(config_cns, extra_packages,
                                   config_fits = config_fits,
                                   config_speaker_type = config_speaker_type,
                                   extra_packages = extra_packages)
-  path_subfolder <- create_subconfig_folder_for_fitting(
-    config_dir = params$config_dir, 
-    par_fit = params$par_fit, 
-    speaker_type = params$speaker_type
-  )
-  
-  fn_ll_MAP <- paste(path_subfolder, "MAP-log-likelihood-ci.csv", sep=FS)
+
+  fn_ll_MAP <- paste(params$speaker_subfolder, "MAP-log-likelihood-ci.csv", sep=FS)
   if(file.exists(fn_ll_MAP)){
     map_ll <- read_csv(fn_ll_MAP)
   } else {
     message("write csv file...")
-    prior_samples <- readRDS(paste(params$config_dir, "samples-prior.rds", sep=FS))
-    prior_predictive <- readRDS(paste(path_subfolder, "prior-predictive.rds", sep=FS))
+    prior_samples <- readRDS(paste(params$fit_dir, "samples-prior.rds", sep=FS))
+    prior_predictive <- readRDS(paste(params$speaker_subfolder, "prior-predictive.rds", sep=FS))
     posterior_samples <- prior_samples %>% format_param_samples() %>%
       group_by(alpha, theta) %>% rename(idx = rowid)
     posterior_predictive <- prior_predictive %>% group_by(sample_id)
@@ -246,7 +242,7 @@ get_likelihoods_random_speaker <- function(config_cns, extra_packages,
     map_ll <- get_log_likelihood_MAP(posterior_predictive, 
                                      posterior_samples,
                                      config_speaker_type)
-    write_csv(map_ll, paste(path_subfolder, "MAP-log-likelihood-ci.csv", sep=FS))
+    write_csv(map_ll, paste(params$speaker_subfolder, "MAP-log-likelihood-ci.csv", sep=FS))
   }
   return(map_ll)
 }

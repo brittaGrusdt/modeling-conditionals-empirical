@@ -17,7 +17,7 @@ config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "flat_dependent"
 config_fits <- "alpha_theta_gamma"
-config_speaker_type <- "literal"  # "pragmatic_utt_type"
+config_speaker_type <- "pragmatic_utt_type"
 
 params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 config_fits = config_fits,
@@ -46,7 +46,8 @@ save_data(posterior_samples %>%
             add_column(config_prior_r = config_weights_relations, 
                        config_cns = config_cns), 
           here(params$speaker_subfolder, "mcmc-posterior.rds"))
-               
+# posterior_samples <- readRDS(here(params$speaker_subfolder, "mcmc-posterior.rds")) 
+              
 # chain plot, iteration vs. value for each chain
 p_chain = posterior_samples %>% 
   filter(!startsWith(as.character(Parameter), "utts.")) %>% 
@@ -58,10 +59,11 @@ ggsave(here(params$speaker_subfolder, "chains.png"), p_chain)
 
 # plot posterior densities
 p.density_posterior = posterior_samples %>% 
+  filter(!startsWith(as.character(Parameter), "utts.")) %>% 
   mutate(Chain = as.factor(Chain)) %>% 
   ggplot(aes(x=value, color = Chain)) +
   geom_density() + 
-  facet_wrap(~Parameter, scales = "free", labeller = label_both, ncol = 4) 
+  facet_wrap(~Parameter, scales = "free", labeller = label_parsed, ncol = 4)
 p.density_posterior
 ggsave(here(params$speaker_subfolder, "density_posterior.png"), p.density_posterior)
 
@@ -70,7 +72,7 @@ hdis.mean_posterior <- mean_hdi(posterior_samples %>% group_by(Parameter), value
 hdis.mean_posterior
 
 p.posterior_hdis = posterior_samples %>% 
-  filter(Parameter %in% c("alpha", "theta")) %>% 
+  filter(!startsWith(as.character(Parameter), "utts.")) %>% 
   ggplot(aes(x = value, fill = Parameter)) +
   stat_halfeye(.width = c(0.95), point_interval = "median_hdi") +
   facet_wrap(~Parameter, labeller = label_parsed, scales = "free") +
