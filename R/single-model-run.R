@@ -14,18 +14,30 @@ theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 # Setup -------------------------------------------------------------------
 config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
-config_weights_relations = "semi_informative"
+config_weights_relations = "flat_dependent"
 config_speaker_type = "pragmatic_utt_type"
 params <- prepare_data_for_wppl(config_cns = config_cns, 
                                 config_weights_relations = config_weights_relations, 
                                 config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
 # set alpha and theta, otherwise default values used
-params$alpha <- 2.29
-params$theta <- 0.859
-params$gamma <- 0.296
+# params$alpha <- 2.29
+# params$theta <- 0.859
+# params$gamma <- 0.296
 # params$utt_cost <- df.p_utts %>% dplyr::select(-p) %>% 
 #   pivot_wider(names_from="Parameter", values_from="value")
+
+# use MAP-parameters
+speaker_model <- "pragmatic_gamma"
+if(str_split(speaker_model, "_")[[1]][1] != 
+   str_split(config_speaker_type, "_")[[1]][1]) stop("mismatch speaker model and speaker type")
+
+Sys.setenv(R_CONFIG_ACTIVE = paste("MAP", speaker_model, sep="_"))
+pars.speaker_model <- config::get()
+params$alpha <- pars.speaker_model$alpha
+params$theta <- pars.speaker_model$theta
+params$gamma <- pars.speaker_model$gamma
+
 
 model <- "var rsa_predictions = run_rsa_model(data)
 rsa_predictions
@@ -42,6 +54,12 @@ model.predictions <- wppl_output %>%
   bind_rows() %>% group_by(id) %>% 
   mutate(p_hat_round = round(p_hat, 2)) %>% 
   arrange(desc(p_hat))
+
+# save_data(model.predictions %>% add_column(theta=params$theta,
+#                                            gamma = params$gamma,
+#                                            alpha = params$alpha),
+#           here(params$config_dir,
+#                paste("rsa-results-MAP-", speaker_model, ".rds", sep="")))
 
 model.predictions %>% dplyr::select(ll_ci, id) %>% distinct() %>% 
   arrange(desc(ll_ci))

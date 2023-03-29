@@ -158,6 +158,26 @@ generate_utts:
 #   p_c: !expr c("high", "low", "unc")
   #fn_kl_divergences: "best-kl-divergences.rds"
 
+MAP_literal_gamma:
+  alpha: 4.35
+  theta: 0.01
+  gamma: 0.99
+  
+MAP_literal:
+  alpha: 5.61
+  theta: 0.01
+  gamma: 1
+
+MAP_pragmatic:
+  alpha: 3.09
+  theta: 0.39
+  gamma: 1
+
+MAP_pragmatic_gamma:
+  alpha: 1.66
+  theta: 0.9
+  gamma: 0.29
+
 
 priors_relations:
   informative: !expr tibble::tribble(~"A implies C", ~"-A implies C", ~"C implies A", ~"-C implies A", ~"A || C", ~"context",1, 0, 0, 0, 0, "if1", 0.9, 0.1, 0, 0, 0, "if2", 0, 0, 0, 0, 1, "independent")
