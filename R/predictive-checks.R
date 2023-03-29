@@ -48,7 +48,9 @@ obs.dep <- df.bootstrapped_uc_ratios_ci %>%
   rename(utt_type = utterance, utterance = utt)
 
 df.observed <- bind_rows(obs.ind, obs.dep)
+TRIALS <- params$observations$id %>% unique()
 
+################################################################################
 # Prior predictive --------------------------------------------------------
 # condition statements are necessary to make sure that we can actually run 
 # the RSA-model with the sampled set of parameters!
@@ -80,7 +82,7 @@ var model_prior = function(){
 
 path_prior_samples <- paste(params$fit_dir, "samples-prior.rds", sep=FS)
 if(!file.exists(path_prior_samples)){
-  mcmc_params <- tibble(n_samples = 1000, n_burn = 1000, n_lag = 15, n_chains = 4)
+  mcmc_params <- tibble(n_samples = 1000, n_burn = 2000, n_lag = 15, n_chains = 4)
   # get samples from prior distribution
   prior_samples <- webppl(
     program_code = model,
@@ -109,7 +111,7 @@ if(!file.exists(path_prior_samples)){
 # chain plot
 prior_samples %>% filter(!startsWith(Parameter, "utts.")) %>% 
   ggplot(aes(x=Iteration, y=value, color=Chain)) + geom_line() +
-  facet_wrap(~Parameter, scales="free")
+  facet_wrap(~Parameter, scales="free", labeller = label_parsed)
 
 # density plot with MCMC-samples from prior distributions overlayed with 
 # samples from underlying prior distributions (without considering invalid
@@ -131,7 +133,6 @@ prior_samples %>%
 prior_samples %>% pivot_wider(names_from="Parameter", values_from="value") %>% 
   ggplot(aes(x=alpha, y=theta)) + 
   geom_density_2d_filled()
-
 
 # then run RSA-model once with each sampled set of parameters -------------
 params$sampled_params <- format_param_samples(prior_samples)
@@ -163,6 +164,7 @@ save_data(prior_predictive,
           paste(params$speaker_subfolder, "prior-predictive.rds", sep=FS))
 # prior_predictive <- readRDS(paste(params$speaker_subfolder, "prior-predictive.rds", sep=FS))
 
+################################################################################
 # Plots -------------------------------------------------------------------
 model_utts = c("-A", "A", "-C", "C",
                "-C and -A", "-C and A", "C and -A", "C and A", 
@@ -320,16 +322,21 @@ pp.ll %>%
   geom_point() + geom_line() + labs(y="log likelihood data") +
   facet_wrap(~id, scales="free")
 
-
+################################################################################
 # Posterior predictive ----------------------------------------------------
 # get samples from posterior distribution
-posterior_samples <- readRDS(paste(params$speaker_subfolder, "mcmc-posterior.rds", sep=FS)) %>% 
+posterior_samples <- readRDS(paste(params$speaker_subfolder,
+                                   "mcmc-posterior.rds", sep=FS)) %>% 
   format_param_samples() 
 # expected values
-posterior_samples %>% summarize(mean_alpha = mean(alpha), mean_theta = mean(theta))
+posterior_samples %>%
+  summarize(mean_alpha = mean(alpha), 
+            mean_gamma = mean(gamma),
+            mean_theta = mean(theta))
+
 # just run rsa once for each identical parameter combination!
 params$sampled_params <- posterior_samples %>% 
-  distinct_at(vars(c(alpha, theta)), .keep_all = T) %>% 
+  distinct_at(vars(params$par_fit), .keep_all = T) %>% 
   dplyr::select(-rowid) %>% rowid_to_column()
 
 # then run RSA-model once with each sampled set of parameters
@@ -338,46 +345,66 @@ data <- webppl(program_file = params$wppl_predictive_checks,
                data_var = "data",
                random_seed = params$seed_webppl,
                packages = params$packages)
-save_data(data, 
-          paste(params$speaker_subfolder, "posterior-predictive-wppl-output.rds", sep=FS))
+save_data(data, paste(params$speaker_subfolder, 
+                      "posterior-predictive-wppl-output.rds", sep=FS))
+# data <- readRDS(paste(params$speaker_subfolder,
+#                       "posterior-predictive-wppl-output.rds", sep=FS))
 
 # add predictions as often as param combi occurred
-nb_occs <- posterior_samples %>% group_by(alpha, theta) %>% 
-  summarize(n = n(), .groups = "drop")
+if("gamma" %in% params$par_fit){
+  nb_occs <- posterior_samples %>% group_by(alpha, theta, gamma) %>% 
+    summarize(n = n(), .groups = "drop")
+}else {
+  nb_occs <- posterior_samples %>% group_by(alpha, theta) %>% 
+    summarize(n = n(), .groups = "drop")
+}
 nb_contexts <- df.observed$id %>% unique() %>% length()
 countenv <- environment()
 countenv$i <- 1
+if(nb_occs$n %>% sum != nrow(posterior_samples)) stop("error within nb_occs!")
 posterior_predictive <- data %>% imap(function(x, sample_id){
+  if(countenv$i %% 100 == 0) message(i)
   predictions <- as_tibble(x)
   pars <- params$sampled_params %>% filter(sample_id == !!sample_id)
   df.predictions <- map(predictions, function(y){
-    as_tibble(y) %>% mutate(ll_ci = as.numeric(ll_ci))
+    df <- as_tibble(y) %>% mutate(ll_ci = as.numeric(ll_ci), 
+                                  alpha = pars$alpha, 
+                                  theta = pars$theta)
+    if("gamma" %in% colnames(pars)) df <- df %>% mutate(gamma = pars$gamma)
+    return(df)
   }) %>% bind_rows() %>% add_column(sample_id = !!sample_id)
 
-  n = nb_occs %>% filter(theta== pars$theta & alpha == pars$alpha) %>% pull(n)
+  if("gamma" %in% colnames(pars)){
+    n = nb_occs %>% 
+      filter(theta == pars$theta & alpha == pars$alpha & gamma == pars$gamma) %>% 
+      pull(n)
+  } else {
+    n = nb_occs %>% filter(theta == pars$theta & alpha == pars$alpha) %>% pull(n)
+  }
   if(n > 1){
     df.predictions <- df.predictions %>% slice(rep(row_number(), n)) %>% 
       add_column(idx = rep(seq(countenv$i, countenv$i + n - 1), 
                            each=nb_contexts * params$utterances %>% length()))
+    if(nrow(df.predictions) %% 260 != 0) stop("error nrow predictions")
   }else {
-    df.predictions <- df.predictions %>% add_column(idx=i)
+    df.predictions <- df.predictions %>% add_column(idx=countenv$i)
   }
   countenv$i <- countenv$i+n
   return(df.predictions)
 }) %>% bind_rows()
 save_data(posterior_predictive, 
           paste(params$speaker_subfolder, "posterior-predictive.rds", sep=FS))
-# posterior_predictive <- readRDS(paste(params$speaker_subfolder, "posterior-predictive.rds",
-#                                       sep=FS))
+# posterior_predictive <- readRDS(paste(params$speaker_subfolder, "posterior-predictive.rds", sep=FS))
 
+
+# Plots Posterior + Prior predictives -------------------------------------
 predictives <- bind_rows(
   prior_predictive %>% add_column(distribution = "prior predictive"),
   posterior_predictive %>% add_column(distribution = "posterior predictive")
 )
 
-trials <- params$observations$id %>% unique()
 utterances <- posterior_predictive$utterance %>% unique()
-map(trials, function(trial){
+map(TRIALS, function(trial){
   if(str_detect(trial, "independent")){
     df.obs <- obs.ind %>% filter(trial == !!trial)
   }else {
@@ -471,7 +498,7 @@ make_pred_plot = function(df.joint, n_facets){
 
 prediction_plots_all <- map(c("if1", "if2", "independent"), function(rel){
   ncol <- switch(rel, "if1"=4, "if2"=4, "independent"=5)
-  df.rel <- joint_data %>% filter(str_detect(id, rel))
+  df.rel <- joint_data %>% filter(str_detect(id, rel)) #%>% filter(estimate.pp < 0.1)
   p <-  make_pred_plot(df.rel, ncol) +
     theme(axis.text.x = element_text(size = 16))
   # save legend separately once
@@ -493,14 +520,29 @@ posterior_predictive.ll = posterior_predictive %>%
 save_data(posterior_predictive.ll, paste(params$speaker_subfolder, 
                                          "posterior_predictive_ll.rds", 
                                          sep=FS))
+
 # expected log likelihoods posterior
 evs_ll <- get_ev_log_likelihood(posterior_predictive, config_speaker_type)
 write_csv(evs_ll, paste(params$speaker_subfolder, "evs-log-likelihood-ci.csv", sep=FS))
-# log likelihood for MAP values
+# log likelihood for MAP values across contexts
 map_ll <- get_log_likelihood_MAP(posterior_predictive, 
                                  posterior_samples,
-                                 config_speaker_type)
-write_csv(map_ll, paste(params$speaker_subfolder, "MAP-log-likelihood-ci.csv", sep=FS))
+                                 config_speaker_type, 
+                                 params$par_fit)
+write_csv(map_ll, paste(params$speaker_subfolder, "MAP-log-likelihoods.csv", sep=FS))
+
+# log likelihood for MAP values separately for each context
+map_ll.contexts <- map(TRIALS, function(c){
+  map_ll <- get_log_likelihood_MAP(posterior_predictive %>% filter(id == c), 
+                                   posterior_samples,
+                                   config_speaker_type, 
+                                   params$par_fit)
+  return(map_ll)
+}) %>% bind_rows() %>% arrange(id)
+write_csv(map_ll.contexts, 
+          paste(params$speaker_subfolder, "MAP-log-likelihood-ci.csv", sep=FS))
+
+
 
 # Evidence models
 # integral P(D|M, theta) * P(theta)
@@ -515,75 +557,169 @@ write_csv(evidence_model, paste(params$speaker_subfolder, "evidence_model.csv", 
 
 # Plots across speaker types ----------------------------------------------
 # Log-likelihood plots 
-fn_literal <- here("results", "default-prior", 
-                   "semi_informative-fine_grained_cns-500", "alpha_theta", 
-                   "literal", "MAP-log-likelihood-ci.csv")
-fn_pragmatic <- str_replace(fn_literal, "literal", "pragmatic_utt_type")
+config_weights_relations <- "flat_dependent"
+config_cns = "fine_grained_cns"
+extra_packages = c("dataHelpers")
 
-# retrieve data for random speaker since no posterior fitting done #
-ll.random_speaker = get_likelihoods_random_speaker(
-  config_cns, extra_packages, config_weights_relations, config_fits
-)
+map.ll.speakers <- get_data_all_speakers(
+  config_weights_relations, config_cns, extra_packages, 
+  "MAP-log-likelihoods.csv"
+) %>% group_by(alpha, theta, gamma, speaker_model)
 
-map.ll.speakers <- bind_rows(
-  read_csv(fn_literal),
-  read_csv(fn_pragmatic) %>% mutate(speaker_model = "pragmatic"), #(instead of pragmatic_utt_type)
-  ll.random_speaker
-) %>% mutate(neg_ll = -1 * ll_ci)
+# plot MAP ll for each context with overall MAP-parameters
+# summed ll across contexts
+map.ll.speakers.summed <- map.ll.speakers %>%
+  group_by(sample_id, speaker_model, alpha, theta, gamma) %>% 
+  summarize(summed_ll = sum(ll_ci), 
+            summed_neg_ll = round(sum(neg_ll_ci)), .groups = "drop_last") %>% 
+  mutate(alpha = round(alpha, 2), 
+         theta = round(theta, 2),
+         gamma = case_when(!is.na(gamma) ~ round(gamma, 2), 
+                           T ~ gamma), 
+         label_par = case_when(is.na(alpha) ~ "",
+                               is.na(gamma) ~ paste("alpha: ", alpha, " theta: ", theta, sep=""),
+                               T ~ paste("alpha: ", alpha, " theta: ", theta, " gamma:", gamma, sep="")),
+         y = case_when(speaker_model == "random" ~ 200,
+                       speaker_model == "literal.gamma" ~ 150, 
+                       speaker_model == "literal" ~ 170, 
+                       speaker_model == "pragmatic" ~ 100, 
+                       speaker_model == "pragmatic.gamma" ~ 40)
+         )
+map.ll.speakers.summed
 
-# plot MAP ll by context
-p.MAP_ll.ci <- map.ll.speakers %>% 
+p.MAP_ll <- map.ll.speakers %>% 
   mutate(label_id = map_chr(id, get_str_contexts)) %>% 
-  ggplot(aes(x=label_id, y = neg_ll, color = speaker_model, group = speaker_model)) + 
+  ggplot(aes(x=label_id, y = neg_ll_ci, color = speaker_model, group = speaker_model)) + 
   geom_point() + geom_line() +
-  labs(x = "context", y = "negative log likelihood") +
+  geom_text(data = map.ll.speakers.summed %>% add_column(x="'if'[1]*':HI'"), 
+            aes(x=x, y=y, label = summed_neg_ll)) +
+  geom_text(data = map.ll.speakers.summed %>% add_column(x="'if'[2]*':HL'"), 
+            aes(x=x, y=y, label = label_par)) +
+  labs(x = "context", y = "negative log likelihood\n for MAP parameters") +
   scale_x_discrete(labels = label_parse())
-p.MAP_ll.ci
-ggsave(filename = here("results", "default-prior", 
-                       "semi_informative-fine_grained_cns-500", "alpha_theta", 
-                       "MAP_ll_ci.png"), p.MAP_ll.ci)
-
-
-# MAP ll across contexts
-map.ll.speakers.summed <- map.ll.speakers %>% group_by(sample_id, speaker_model) %>% 
-  summarize(summed_ll = sum(ll_ci), summed_neg_ll = sum(neg_ll))
-
-p.MAP_ll <- map.ll.speakers.summed %>% 
-  ggplot(aes(x = reorder(speaker_model, -summed_neg_ll), y=summed_neg_ll)) + 
-  geom_bar(stat="identity") +
-  labs(x = "speaker model", y = "negative log likelihood")
-
 p.MAP_ll
 ggsave(filename = here("results", "default-prior", 
-                       "semi_informative-fine_grained_cns-500", "alpha_theta", 
-                       "MAP_ll_summed.png"), p.MAP_ll)
+                       paste(config_weights_relations, "-", config_cns, "-500", sep=""),
+                       "MAP_ll.png"), p.MAP_ll)
 
-
-# boxplots ll posterior samples
-# Log-likelihood plots 
-fn_literal <- here("results", "default-prior", 
-                   "semi_informative-fine_grained_cns-500", "alpha_theta", 
-                   "literal", "posterior_predictive_ll.rds")
-fn_pragmatic <- str_replace(fn_literal, "literal", "pragmatic_utt_type")
-fn_random <- str_replace(fn_literal, "literal", "random")
-
-pp.ll.speakers <- 
-  bind_rows(
-    readRDS(fn_literal) %>% add_column(speaker_model = "literal"),
-    readRDS(fn_pragmatic) %>% add_column(speaker_model = "pragmatic"),
-    readRDS(fn_random) %>% add_column(speaker_model = "random")
-  )
-
-p.pp_ll_speakers <- pp.ll.speakers %>%
-  mutate(neg_ll_ci = -1 * ll_ci, 
-         label_id = map_chr(id, get_str_contexts)) %>% 
+# Boxplots negative log likelihoods for each sample from posterior (alpha, theta, gamma)
+pp.ll.speakers <- get_data_all_speakers(config_weights_relations, config_cns, 
+                                        extra_packages, "posterior_predictive_ll.rds")
+p.pp_ll_speakers <- pp.ll.speakers %>% 
+  # filter(!endsWith(speaker_model, ".gamma")) %>% 
+  mutate(label_id = map_chr(id, get_str_contexts)) %>% 
   ggplot(aes(x=label_id, y=neg_ll_ci, color=speaker_model)) + 
   geom_boxplot() +
   scale_x_discrete(labels = label_parse()) +
   labs(x="context", y = "negative log likelihood")
+p.pp_ll_speakers
 ggsave(filename = here("results", "default-prior", 
-                       "semi_informative-fine_grained_cns-500", "alpha_theta",
+                       paste(config_weights_relations, "-", config_cns, "-500", sep=""),
                        "pp_ll_speakers.png"), p.pp_ll_speakers)
+
+# MAP-values for each context
+MAP.contexts <- get_data_all_speakers(
+  config_weights_relations, config_cns, extra_packages, 
+  "MAP-log-likelihood-ci.csv"
+)
+p.MAPs_contexts = MAP.contexts %>% filter(speaker_model != "random") %>% 
+  mutate(label_id = map_chr(id, get_str_contexts)) %>% 
+  pivot_longer(cols = c(alpha, theta, gamma), names_to = "Parameter") %>% 
+  filter(!is.na(value)) %>% # gamma is NA if non-existent
+  # mutate(value = case_when(is.na(value) ~ 1, T ~ value)) %>% 
+  ggplot(aes(x = label_id, y = value, color = speaker_model, group = speaker_model)) + 
+  geom_point() + geom_line() + 
+  facet_wrap(~Parameter, scales = "free", labeller = label_parsed) + 
+  theme(axis.text.x = element_text(size=11)) +
+  scale_x_discrete(labels = label_parse()) + 
+  labs(x = "context", y = "MAP parameter value")
+p.MAPs_contexts
+ggsave(filename = here("results", "default-prior", 
+                       paste(config_weights_relations, "-", config_cns, "-500", sep=""),
+                       "MAPs_contexts.png"), p.MAPs_contexts, 
+       width = 24)
+
+
+# Data vs. Model with MAP-parameters --------------------------------------
+# run RSA model with MAP-parameters (across all contexts) for each speaker model
+predictions.MAP <- bind_rows(
+  readRDS(paste(params$config_dir, "rsa-results-MAP-literal_gamma.rds", 
+                sep=FS)) %>% add_column(speaker_model = "literal.gamma"),
+  readRDS(paste(params$config_dir, "rsa-results-MAP-literal.rds", 
+                sep=FS)) %>% add_column(speaker_model = "literal"),
+  readRDS(paste(params$config_dir, "rsa-results-MAP-pragmatic_gamma.rds", 
+                sep=FS)) %>% add_column(speaker_model = "pragmatic.gamma"),
+  readRDS(paste(params$config_dir, "rsa-results-MAP-pragmatic.rds", 
+                sep=FS)) %>% add_column(speaker_model = "pragmatic")
+)
+
+joint <- left_join(
+  predictions.MAP,
+  df.observed %>% dplyr::select(estimate, lower, upper, utterance, trial) %>% 
+    rename(id = trial)
+) %>% 
+  mutate(estimate = case_when(is.na(estimate) ~ 0, T ~ estimate),
+         lower = case_when(is.na(lower) ~ 0, T ~ lower),
+         upper = case_when(is.na(upper) ~ 0, T ~ upper)) %>% 
+  mutate(response = utterance) %>% 
+  translate_utterances() %>% 
+  mutate(label_par = 
+           case_when(is.na(alpha) ~ "",
+                     gamma == 1 ~ paste("alpha: ", alpha, " theta: ", theta, sep=""),
+                     T ~ paste("alpha: ", alpha, " theta: ", theta, " gamma: ", gamma, sep="")))
+
+plots <- group_map(joint %>% group_by(id), function(df, df.grp){
+  pars <- df %>% dplyr::select(label_par, speaker_model, alpha, theta, gamma) %>% distinct() 
+  p <- df %>% 
+    ggscatter(y = "estimate", x = "p_hat", add = "reg.line",
+              conf.int = TRUE, cor.method = "pearson",
+              ylab = "Data", xlab = "Prediction (MAP parameters)") +
+    # geom_abline(slope = 1, intercept = 0, color = "darkgrey") +
+    geom_point(aes(x=p_hat, y=estimate, color = response, fill = response)) +
+    geom_errorbar(aes(ymin = lower, ymax = upper, color=response)) +
+    geom_text(data = pars, 
+              aes(x=Inf, y=-Inf, label = paste("alpha:", alpha, 
+                                               "~''*gamma:", gamma,
+                                               "~''*theta:", theta)),
+              size = 6, parse=T, vjust = -1, hjust = 1) +
+    facet_wrap(~speaker_model, scales = "free") +
+    scale_color_manual(name = "utterance", values = UTT_COLORS) +
+    scale_fill_manual(name = "utterance", values = UTT_COLORS) +
+    guides(fill = guide_legend(title.position = "top"), 
+           color = guide_legend(title.position = "top")) +
+    theme(text = element_text(size=16), legend.text = element_text(size=14)) +
+    stat_cor(size = 6) +
+    ggtitle(get_name_context(df.grp$id))
+  ggsave(paste(params$config_dir, FS, 
+               "models-vs-data-", df.grp$id, ".png", sep=""), 
+         p, width = 16)
+   return(p)
+})
+
+
+
+
+
+  
+
+
+# context ind:UL ----------------------------------------------------------
+freq_utts.ind_ul = df.observed %>% filter(estimate > 0.05 & id == "ind:UL")
+# config_weights_relations <- "flat_dependent"
+# config_cns = "fine_grained_cns"
+# extra_packages = c("dataHelpers")
+# 
+# pp.speakers <- get_data_all_speakers(config_weights_relations,
+#                                      config_cns, 
+#                                      extra_packages,
+#                                      "posterior-predictive.rds")
+# 
+
+
+
+
+
+
 
 # Predictions for single states -------------------------------------------
 # to see how alpha and theta influence predictions for a particular state, 

@@ -185,18 +185,22 @@ format_param_samples = function(samples){
 }
 
 
-# returns log likelihood for each context for Maximum a posteriori param values
+#' returns log likelihood for each context for Maximum a posteriori param values
+#' across contexts (i.e parameter combi so that log likelihood summed across contexts
+#' is maximal)
 get_log_likelihood_MAP <- function(predictive, posterior_samples, speaker_type, 
                                    free_model_pars){
   # log likelihood for MAP values
   map_ll.id = predictive %>% group_by(idx) %>% 
     distinct_at(vars(c(ll_ci, id, idx, sample_id))) %>% 
     group_by(idx, sample_id) %>% 
-    summarize(summed_ll = sum(ll_ci), .groups = "drop") %>% arrange(summed_ll) %>% 
+    summarize(summed_ll = sum(ll_ci), .groups = "drop") %>% 
+    arrange(summed_ll) %>% 
     filter(summed_ll == max(summed_ll)) %>% 
     pull(sample_id) %>% unique()
   
   map_ll.ci <- predictive %>% filter(sample_id == map_ll.id[1]) %>% 
+    #predictive %>%  filter(sample_id %in% map_ll.id) %>% 
     dplyr::select(-idx, -utterance, -p_hat) %>% distinct() %>% 
     add_column(speaker_model = speaker_type)
   
@@ -219,15 +223,15 @@ get_ev_log_likelihood <- function(pp, speaker_type){
 
 
 get_likelihoods_random_speaker <- function(config_cns, extra_packages,
-                                           config_weights_relations, 
-                                           config_fits) { 
+                                           config_weights_relations) {
   config_speaker_type <- "random"
+  config_fits <- "alpha_theta"
   params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
                                   config_fits = config_fits,
                                   config_speaker_type = config_speaker_type,
                                   extra_packages = extra_packages)
 
-  fn_ll_MAP <- paste(params$speaker_subfolder, "MAP-log-likelihood-ci.csv", sep=FS)
+  fn_ll_MAP <- paste(params$speaker_subfolder, "MAP-log-likelihoods.csv", sep=FS)
   if(file.exists(fn_ll_MAP)){
     map_ll <- read_csv(fn_ll_MAP)
   } else {
@@ -241,10 +245,45 @@ get_likelihoods_random_speaker <- function(config_cns, extra_packages,
     # log likelihood for MAP values
     map_ll <- get_log_likelihood_MAP(posterior_predictive, 
                                      posterior_samples,
-                                     config_speaker_type)
-    write_csv(map_ll, paste(params$speaker_subfolder, "MAP-log-likelihood-ci.csv", sep=FS))
+                                     config_speaker_type, 
+                                     str_split(config_fits, "_")[[1]]
+                                     ) %>% 
+      mutate(alpha=NA, theta=NA, sample_id=NA) # same result for all parameters!
+    write_csv(map_ll, paste(params$speaker_subfolder, "MAP-log-likelihoods.csv", sep=FS))
   }
   return(map_ll)
+}
+
+
+
+get_data_all_speakers = function(config_weights_relations, config_cns,
+                                 extra_packages, fn_data){
+  fn_literal <- here(
+    "results", "default-prior", 
+    paste(config_weights_relations, "-", config_cns, "-500", sep=""),
+    "alpha_theta", "literal", fn_data
+  )
+  fn_pragmatic <- str_replace(fn_literal, "literal", "pragmatic_utt_type")
+  fn_literal.gamma <- str_replace(fn_literal, "alpha_theta", "alpha_theta_gamma")
+  fn_pragmatic.gamma <- str_replace(fn_literal.gamma, "literal", "pragmatic_utt_type")
+  
+  # retrieve data for random speaker since no posterior fitting done #
+  ll.random_speaker = get_likelihoods_random_speaker(
+    config_cns, extra_packages, config_weights_relations
+  )
+  
+  if(str_ends(fn_data, "csv")) func <- read_csv
+  if(str_ends(fn_data, "rds")) func <- readRDS
+  
+  data.speakers <- bind_rows(
+    func(fn_literal) %>% mutate(speaker_model = "literal"),
+    func(fn_pragmatic) %>% mutate(speaker_model = "pragmatic"), #(instead of pragmatic_utt_type)
+    ll.random_speaker,
+    func(fn_literal.gamma) %>% mutate(speaker_model = "literal.gamma"),
+    func(fn_pragmatic.gamma) %>% mutate(speaker_model = "pragmatic.gamma"),
+  ) %>% mutate(neg_ll_ci = -1 * ll_ci)
+  
+  return(data.speakers)
 }
 
 
