@@ -19,8 +19,8 @@ theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "flat_dependent"
-config_fits <- "alpha_theta_gamma"
-config_speaker_type <- "pragmatic_utt_type"
+config_fits <- "alpha_theta"
+config_speaker_type <- "literal"# "pragmatic_utt_type"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
                                 config_fits = config_fits,
                                 config_speaker_type = config_speaker_type,
@@ -560,6 +560,8 @@ write_csv(evidence_model, paste(params$speaker_subfolder, "evidence_model.csv", 
 config_weights_relations <- "flat_dependent"
 config_cns = "fine_grained_cns"
 extra_packages = c("dataHelpers")
+params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
+                                extra_packages = extra_packages)
 
 map.ll.speakers <- get_data_all_speakers(
   config_weights_relations, config_cns, extra_packages, 
@@ -579,10 +581,10 @@ map.ll.speakers.summed <- map.ll.speakers %>%
          label_par = case_when(is.na(alpha) ~ "",
                                is.na(gamma) ~ paste("alpha: ", alpha, " theta: ", theta, sep=""),
                                T ~ paste("alpha: ", alpha, " theta: ", theta, " gamma:", gamma, sep="")),
-         y = case_when(speaker_model == "random" ~ 200,
-                       speaker_model == "literal.gamma" ~ 150, 
-                       speaker_model == "literal" ~ 170, 
-                       speaker_model == "pragmatic" ~ 100, 
+         y = case_when(speaker_model == "random" ~ 175,
+                       speaker_model == "literal.gamma" ~ 155, 
+                       speaker_model == "literal" ~ 165, 
+                       speaker_model == "pragmatic" ~ 90, 
                        speaker_model == "pragmatic.gamma" ~ 40)
          )
 map.ll.speakers.summed
@@ -591,12 +593,13 @@ p.MAP_ll <- map.ll.speakers %>%
   mutate(label_id = map_chr(id, get_str_contexts)) %>% 
   ggplot(aes(x=label_id, y = neg_ll_ci, color = speaker_model, group = speaker_model)) + 
   geom_point() + geom_line() +
-  geom_text(data = map.ll.speakers.summed %>% add_column(x="'if'[1]*':HI'"), 
+  geom_text(data = map.ll.speakers.summed %>% add_column(x="ind:UL"), 
             aes(x=x, y=y, label = summed_neg_ll)) +
   geom_text(data = map.ll.speakers.summed %>% add_column(x="'if'[2]*':HL'"), 
             aes(x=x, y=y, label = label_par)) +
   labs(x = "context", y = "negative log likelihood\n for MAP parameters") +
-  scale_x_discrete(labels = label_parse())
+  scale_x_discrete(labels = label_parse()) +
+  scale_color_manual(name = "speaker model", values = SPEAKER_COLORS)
 p.MAP_ll
 ggsave(filename = here("results", "default-prior", 
                        paste(config_weights_relations, "-", config_cns, "-500", sep=""),
@@ -611,6 +614,7 @@ p.pp_ll_speakers <- pp.ll.speakers %>%
   ggplot(aes(x=label_id, y=neg_ll_ci, color=speaker_model)) + 
   geom_boxplot() +
   scale_x_discrete(labels = label_parse()) +
+  scale_color_manual(name = "speaker model", values = SPEAKER_COLORS) +
   labs(x="context", y = "negative log likelihood")
 p.pp_ll_speakers
 ggsave(filename = here("results", "default-prior", 
@@ -632,6 +636,9 @@ p.MAPs_contexts = MAP.contexts %>% filter(speaker_model != "random") %>%
   facet_wrap(~Parameter, scales = "free", labeller = label_parsed) + 
   theme(axis.text.x = element_text(size=11)) +
   scale_x_discrete(labels = label_parse()) + 
+  scale_color_manual(name = "speaker model", 
+                     values = SPEAKER_COLORS[c("literal", "pragmatic", 
+                                               "literal.gamma", "pragmatic.gamma")]) +
   labs(x = "context", y = "MAP parameter value")
 p.MAPs_contexts
 ggsave(filename = here("results", "default-prior", 
@@ -678,10 +685,10 @@ plots <- group_map(joint %>% group_by(id), function(df, df.grp){
     geom_point(aes(x=p_hat, y=estimate, color = response, fill = response)) +
     geom_errorbar(aes(ymin = lower, ymax = upper, color=response)) +
     geom_text(data = pars, 
-              aes(x=Inf, y=-Inf, label = paste("alpha:", alpha, 
+              aes(x=Inf, y=Inf, label = paste("alpha:", alpha, 
                                                "~''*gamma:", gamma,
                                                "~''*theta:", theta)),
-              size = 6, parse=T, vjust = -1, hjust = 1) +
+              size = 6, parse=T, vjust = 1.5, hjust = 1) +
     facet_wrap(~speaker_model, scales = "free") +
     scale_color_manual(name = "utterance", values = UTT_COLORS) +
     scale_fill_manual(name = "utterance", values = UTT_COLORS) +
@@ -692,28 +699,163 @@ plots <- group_map(joint %>% group_by(id), function(df, df.grp){
     ggtitle(get_name_context(df.grp$id))
   ggsave(paste(params$config_dir, FS, 
                "models-vs-data-", df.grp$id, ".png", sep=""), 
-         p, width = 16)
+         p, width = 16, height = 9)
    return(p)
 })
 
+# group relevant conditionals together
+context <- "if2_hl"
+joint.grp <- joint %>% 
+  mutate(utt.grp = case_when(utterance %in% c("A > C", "C > A", "-A > -C", "-C > -A") ~ "conditional", 
+                             T ~ response)) %>% 
+  filter(id==!!context & speaker_model == "pragmatic") %>% 
+  group_by(utt.grp) %>% 
+  summarize(estimate = sum(estimate), p_hat = sum(p_hat))
+  
+pars <- joint %>% 
+  filter(id==!!context & speaker_model == "pragmatic") %>% 
+  dplyr::select(alpha, theta, gamma, label_par) %>% distinct() 
 
-
-
+# adapt utterance colors
+utt_colors <- c(`both blocks fall` = "darkgoldenrod1", 
+                  `blue falls but green does not fall` = "brown1", 
+                  `green falls but blue does not fall` = "brown3",
+                  `neither block falls` = "darkred", 
+                  `blue falls` = "skyblue1",
+                  `green falls` = "green",
+                  `blue does not fall` = "blue", 
+                  `green does not fall` = "darkgreen",
+                  `conditional` = "orchid1",
+                  `if blue falls green does not fall` = "gray15",
+                  `if green falls blue does not fall` = "gray30",
+                  `if blue does not fall green falls` = "gray50",
+                  `if green does not fall blue falls` = "gray80", 
+                  `blue might fall` = "cyan",
+                  `green might fall` = "yellow2",
+                  `blue might not fall` = "turquoise4",
+                  `green might not fall` = "yellow4")
 
   
+p <- joint.grp %>% 
+    ggscatter(y = "estimate", x = "p_hat", add = "reg.line",
+              conf.int = TRUE, cor.method = "pearson",
+              ylab = "Data", xlab = "Prediction (MAP parameters)") +
+    geom_point(aes(x=p_hat, y=estimate, color = utt.grp, fill = utt.grp)) +
+    geom_text(data = pars, 
+              aes(x=Inf, y=Inf, label = paste("alpha:", alpha, 
+                                              "~''*gamma:", gamma,
+                                              "~''*theta:", theta)),
+              size = 6, parse=T, vjust = 1.5, hjust = 1) +
+    guides(fill = guide_legend(title.position = "top"), 
+           color = guide_legend(title.position = "top")) +
+    theme(text = element_text(size=16), legend.text = element_text(size=14)) +
+    scale_color_manual(name = "utterance", values = utt_colors) +
+    scale_fill_manual(name = "utterance", values = utt_colors) +
+    stat_cor(size = 6) +
+    ggtitle(get_name_context(context))
+p
+
+# use of conditionals
+df.use_conditionals <- params$observed_utts_ratios %>% 
+  filter(str_detect(utterance, ">") & n > 0) %>% 
+  arrange(desc(n)) %>% 
+  mutate(conditional.bg = startsWith(utterance, "A") | startsWith(utterance, "-A"),
+         conditional.gb = startsWith(utterance, "C") | startsWith(utterance, "-C")
+         ) 
+
+df.use_conditionals %>% 
+  group_by(conditional.bg, conditional.gb) %>% 
+  summarize(n = sum(n))
 
 
-# context ind:UL ----------------------------------------------------------
+df.use_conditionals %>% filter(conditional.gb)
+df.use_conditionals %>% filter(str_detect(id, "independent"))
+
+
+# prediction of conditionals
+MAP.conditionals <- predictions.MAP %>% mutate(response = utterance) %>% 
+  chunk_utterances() %>% rename(utt_type = utterance, utterance = response) %>% 
+  group_by(id, speaker_model, utt_type) %>% 
+  filter(speaker_model == "pragmatic" & utt_type == "conditional") %>% 
+  mutate(relation = case_when(str_detect(id, "if1") ~ "if1", 
+                              str_detect(id, "if2") ~ "if2", 
+                              str_detect(id, "independent") ~ "independent"))
+
+MAP.conditionals %>% 
+  summarize(p_hat = sum(p_hat), .groups = "drop") %>% 
+  arrange(p_hat)
+
+MAP.conditionals %>% arrange(desc(p_hat)) %>%
+  group_by(relation, utterance) %>% 
+  summarize(p_hat = sum(p_hat), .groups = "drop_last") %>% 
+  arrange(p_hat) %>% 
+  filter(relation == "if1")
+
 freq_utts.ind_ul = df.observed %>% filter(estimate > 0.05 & id == "ind:UL")
-# config_weights_relations <- "flat_dependent"
-# config_cns = "fine_grained_cns"
-# extra_packages = c("dataHelpers")
-# 
-# pp.speakers <- get_data_all_speakers(config_weights_relations,
-#                                      config_cns, 
-#                                      extra_packages,
-#                                      "posterior-predictive.rds")
-# 
+
+
+# Posterior Predictives all speakers --------------------------------------
+# prediction of conditionals
+config_weights_relations <- "flat_dependent"
+config_cns = "fine_grained_cns"
+extra_packages = c("dataHelpers")
+pp.speakers <- get_data_all_speakers(config_weights_relations,
+                                     config_cns,
+                                     extra_packages,
+                                     "posterior-predictive.rds") 
+hdis.pp.speakers <- mean_hdi(
+  pp.speakers %>% group_by(utterance, id, speaker_model), p_hat
+)
+hdis.pp.speakers %>% 
+  filter(str_detect(utterance, "might") & !str_detect(speaker_model, "gamma")) %>% 
+  filter(p_hat < 0.05)
+
+pp.utts <- pp.speakers %>% 
+  #filter(utterance %in% utts.model.ifs | utterance %in% utts.model.conjs) %>% 
+  mutate(response = utterance) %>% chunk_utterances() %>% 
+  rename(utt_type = utterance, utterance = response) %>% 
+  group_by(id, speaker_model, idx, utt_type) %>% 
+  summarize(p_hat = sum(p_hat), .groups = "drop_last")
+
+hdis.pragmatic <- mean_hdi(
+  pp.utts %>% group_by(id, speaker_model, utt_type), p_hat
+) %>% 
+  filter(speaker_model %in% c("pragmatic", "pragmatic.gamma")) %>% 
+  mutate(label_id = map_chr(id, get_str_contexts))
+
+p.hdis.pragmatic <- hdis.pragmatic %>% 
+  ggplot(aes(y=label_id, x = p_hat, color = speaker_model)) +
+  geom_point(aes(shape = utt_type), size=4) + 
+  geom_errorbarh(data = hdis.pragmatic, aes(xmin = .lower, xmax = .upper)) +
+  scale_color_manual(name = "speaker model",
+                     values = SPEAKER_COLORS[c("pragmatic","pragmatic.gamma")]) +
+  scale_shape_discrete(name = "utterance type") +
+  scale_y_discrete(labels = label_parse()) +
+  guides(shape = guide_legend(title.position = "top"), 
+         color = guide_legend(title.position = "top")) +
+  labs(y = "context", x = "Posterior predictive estimates with 95% HDI")
+p.hdis.pragmatic  
+
+ggsave(paste(params$config_dir, "hdis-pp-pragmatic-models.png", 
+             sep=FS), 
+       p.hdis.pragmatic)
+
+# check neg log likelihood ind:UL -----------------------------------------
+levels_utts <- c("-A", "A", "-C", "C", 
+                 "-C and -A", "-C and A", "C and -A",  "C and A",
+                 "might -A",  "might A",   "might -C",  "might C", 
+                 "A > C", "C > A", "A > -C", "-C > A", 
+                 "-A > C", "C > -A", "-A > -C",   "-C > -A")
+pred.ind_ul <- predictions.MAP %>% 
+  filter(speaker_model == "literal" & id=="independent_ul") %>% 
+  mutate(utterance = factor(utterance, levels = levels_utts)) %>% 
+  arrange(utterance)
+
+pred.ind_ul$p_hat
+
+
+
+
 
 
 
