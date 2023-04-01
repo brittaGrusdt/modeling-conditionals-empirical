@@ -26,7 +26,7 @@ source(here("R", "helpers-plotting.R"))
 theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
 
 # Data --------------------------------------------------------------------
-active_config = "default_prior"
+active_config = "pathes"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 
@@ -123,7 +123,7 @@ posterior_samples.probs = bind_rows(
   get_linear_predictors_samples_dep(posterior_draws, 'b'),
   get_linear_predictors_samples_dep(posterior_draws, 'g'),
   get_linear_predictors_samples_dep(posterior_draws, 'none')
-) %>% pivot_longer(cols=c(-response_cat, -rowid), 
+) %>% pivot_longer(cols=c(-response_cat, -rowid, -.chain, -.iteration), 
                    names_to = "predictor", values_to="eta") %>% 
   transform_to_probs('bg') %>% 
   pivot_wider(names_from = "response_cat", values_from = "p_hat") %>% 
@@ -225,7 +225,8 @@ posterior_samples.probs %>%
 
 # Posterior predictive checks ---------------------------------------------
 pp_samples <- posterior_predict(model_dep.pe_task)
-pp_plots <- map(df.brms %>% filter(relation!="independent") %>% pull(id) %>% unique(), 
+pp_plots <- map(df.brms %>% filter(relation != "independent") %>%
+                  pull(id) %>% unique(), 
                 function(trial_id){
   df.trial <- df.brms %>% filter(id == trial_id)
   tit_pblue <- get_name_context(trial_id)
@@ -246,7 +247,8 @@ pp_plots <- map(df.brms %>% filter(relation!="independent") %>% pull(id) %>% uni
     theme(panel.spacing = unit(2, "lines"), 
           axis.text.x = element_text(size=10),
           legend.position = "none") + 
-    facet_wrap("group", scales = "free") #by default ppc_dens_overlay uses fixed scales!
+    #by default ppc_dens_overlay uses fixed scales!
+    facet_wrap("group", scales = "free") 
   
   fn <- paste(target_dir, FS, paste("pp-tables-", trial_id, ".png", sep=""), sep="")
   ggsave(fn, plot = p, width = 5, height=5)

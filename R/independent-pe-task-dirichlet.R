@@ -238,11 +238,14 @@ fn_pp_plots = function(trial_id){
   yrep_2d <- matrix(yrep, nrow=100, ncol=N*4)
   
   p <- ppc_dens_overlay_grouped(y=y_vec, yrep = yrep_2d, group = grp) +
-    labs(title = paste("context:", get_name_context(trial_id))) +
+    labs(title = get_name_context(trial_id)) +
+    theme(panel.spacing = unit(2, "lines"), 
+          axis.text.x = element_text(size=10),
+          legend.position = "none") + 
     #by default ppc_dens_overlay uses fixed scales!
     facet_wrap("group", scales = "free") 
   
-  fn <- paste("pp-tables-evs-posterior-", trial_id, ".png", sep="")
+  fn <- paste("pp-tables-", trial_id, ".png", sep="")
   target_path <- paste(target_dir, FS, fn, sep="")
   ggsave(target_path, plot = p)
   return(p)

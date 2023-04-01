@@ -56,7 +56,7 @@ get_linear_predictors_dep = function(predicted_cat, model_params){
 get_linear_predictors_samples_dep = function(draws, response_cat){
   mu = paste('b_mu', response_cat, sep='')
   df = draws %>% 
-    transmute(
+    transmute(.chain, .iteration,
       if1_high = get(paste(mu, '_Intercept', sep='')),
       if1_low = if1_high + get(paste(mu, '_pbluelow', sep = '')),
       if1_unc = if1_high + get(paste(mu, '_pblueunc', sep = '')),

@@ -1,6 +1,7 @@
 default: 
   save: 1
   verbose: 1
+  seed_webppl: 123467
 
 pathes: 
   dir_data: "data"
@@ -38,7 +39,6 @@ rsa_params:
                            "conditionalsDefault", sep = .Platform$file.sep),
                      paste("webppl-model", "node_modules", 
                            "conditionalsModel", sep = .Platform$file.sep))
-  seed_webppl: 123467
   # parameters prior distributions rsa parameters
   alpha_mu: 1.5
   alpha_sigma: 1
