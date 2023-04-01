@@ -42,7 +42,7 @@ make_pp_plots_new_dependent_tables = function(df.dep, sampled_tables, trials,
   pp_plots_new_tables <- map(trials, function(trial_id){
     df.trial <- df.dep %>% filter(id == trial_id)
     tit <- get_name_context(trial_id)
-    fn <- paste(fn_prefix, "_", trial_id, ".png", sep="")
+    fn <- paste(fn_prefix, "-", trial_id, ".png", sep="")
     target_path <- paste(target_dir, FS, fn, sep="")
     df.samples <- sampled_tables %>% filter(id == trial_id)
     p <- plot_new_tables(df.trial, df.samples, tit, target_path)
@@ -59,13 +59,15 @@ sample_tables = function(df.behav, trials, params, fn_wppl_program, repetitions=
       samples_trial <- params %>% filter(id == trial_id) 
       data_trial <- df.behav %>% filter(id == trial_id)
       
+      # get a set of new tables of same size as observed data for each parameter 
+      # sample from the posterior
       map(seq(1, nrow(samples_trial)), function(idx){
         posterior_params <- samples_trial[idx,]
         data_webppl <- list(probs = data_trial,
                             evs_params = posterior_params)
         
         samples.tbls <- webppl(
-          program_file = fn_wppl_program, #here("webppl-model", "posterior-dependent-data.wppl"),
+          program_file = fn_wppl_program,
           data_var = "data",
           model_var = "sample_table",
           data = data_webppl,

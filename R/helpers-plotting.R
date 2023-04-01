@@ -14,9 +14,9 @@ UTT_COLORS <- c(`both blocks fall` = "darkgoldenrod1",
                 `blue falls but green does not fall` = "brown1", 
                 `green falls but blue does not fall` = "brown3",
                 `neither block falls` = "darkred", 
-                `blue falls` = "blue",
+                `blue falls` = "skyblue1",
                 `green falls` = "green",
-                `blue does not fall` = "darkblue", 
+                `blue does not fall` = "blue", 
                 `green does not fall` = "darkgreen",
                 `if blue falls green falls` = "orchid1",
                 `if green falls blue falls` = "mediumvioletred",
@@ -26,11 +26,22 @@ UTT_COLORS <- c(`both blocks fall` = "darkgoldenrod1",
                 `if green falls blue does not fall` = "gray30",
                 `if blue does not fall green falls` = "gray50",
                 `if green does not fall blue falls` = "gray80", 
-                `blue might fall` = "lightblue3",
-                `green might fall` = "lightgreen",
-                `blue might not fall` = "royalblue",
-                `green might not fall` = "seagreen"
+                `blue might fall` = "cyan",
+                `green might fall` = "yellow2",
+                `blue might not fall` = "turquoise4",
+                `green might not fall` = "yellow4"
 )
+
+
+# mapping speaker models to colors ----------------------------------------
+SPEAKER_COLORS <- c(
+  `random` = "gray47",
+  `literal` = "blue",
+  `pragmatic` = "red",
+  `literal.gamma` = "skyblue",
+  `pragmatic.gamma` = "indianred4"
+)
+
 # context names -----------------------------------------------------------
 get_dep_context_expression = function(trial_id){
   expr <- switch(trial_id,

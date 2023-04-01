@@ -32,7 +32,7 @@ trial_names <- c("if1_hh"=expression("if"[1]*":HI"),
 prob_names <- c("blue"="P(b)", "if_bg" = "P(g|b)", "if_nbg"="P(g|¬b)")
 
 # Data --------------------------------------------------------------------
-active_config = "default_prior"
+active_config = "pathes"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 
@@ -156,12 +156,15 @@ posterior_means %>% filter(id == "if1_uh")
 
 # tables sampled for each draw from posterior
 sampled_tables <- sample_tables(
-  df.dep, dep_trials, posterior_samples.dep %>% filter(Iteration <= 100),
+  df.dep, dep_trials, posterior_samples.dep %>% filter(Iteration <= 25),
   here("webppl-model", "posterior-dependent-data.wppl")
 )
 save_data(sampled_tables, 
           paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
 
+pp_plots = make_pp_plots_new_dependent_tables(
+  df.dep, sampled_tables, dep_trials, target_dir, "pp-tables"
+)
 # Sample tables with mean posterior values --------------------------------
 # tables sampled with mean posterior values, N_rep x N draws
 # use N_rep = 20 repetitions
@@ -174,14 +177,8 @@ sampled_tables.evs <- sample_tables(
   here("webppl-model", "posterior-dependent-data.wppl"), 
   repetitions = 100
 )
-save_data(sampled_tables.evs, paste(target_dir, "sampled-tables-evs-posterior.rds", sep=FS))
+#save_data(sampled_tables.evs, paste(target_dir, "sampled-tables-evs-posterior.rds", sep=FS))
 
-pp_plots = make_pp_plots_new_dependent_tables(
-  df.dep, sampled_tables.evs, dep_trials, target_dir, "predicted-tables-evs-posterior"
-)
-pp_plots = make_pp_plots_new_dependent_tables(
-  df.dep, sampled_tables, dep_trials, target_dir, "pp-tables"
-)
 
 # Posterior predictive ----------------------------------------------------
 # Log likelihood plots

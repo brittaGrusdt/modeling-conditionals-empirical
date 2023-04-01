@@ -25,7 +25,7 @@ trial_names <- c("independent_hh" = "ind:HH",
                  "independent_hl" = "ind:HL")
 
 # Data --------------------------------------------------------------------
-active_config = "default_prior"
+active_config = "pathes"
 Sys.setenv(R_CONFIG_ACTIVE = active_config)
 params <- config::get()
 
@@ -117,10 +117,10 @@ zoib_plots = function(df.behav){
     summarize(n = n(), .groups = "drop_last") %>%
     mutate(proportion = n / sum(n))
   
-    p.zoi = df.behav.zoi %>%
-      ggplot(aes(x=name, y = proportion)) +
-      geom_bar(stat="identity", aes(fill=value), position=position_dodge()) +
-      facet_wrap(~id) + labs(y = "P(x=value|zoi)", x = "probability")
+  p.zoi = df.behav.zoi %>%
+    ggplot(aes(x=name, y = proportion)) +
+    geom_bar(stat="identity", aes(fill=value), position=position_dodge()) +
+    facet_wrap(~id) + labs(y = "P(x=value|zoi)", x = "probability")
   return(list(zoi=p.zoi, beta=p.beta))
 }
 zoib_plots(df.behav)
@@ -272,7 +272,8 @@ plots.pp_evs = map(ind_trials, function(trial_id){
   
   p <- ppc_dens_overlay_grouped(y = y[1,] %>% as.numeric(), 
                                 yrep = mat, group = grp) +
-    labs(title = trial_names[[trial_id]])
+    labs(title = trial_names[[trial_id]]) +
+    facet_wrap("group", scales = "free")
   fn <- paste(target_dir, paste("new_data_evs_", trial_id, ".png", sep=""), sep=FS)
   ggsave(fn, p, width=11)
   return(p)
@@ -281,25 +282,22 @@ plots.pp_evs
 
 
 # Generate new independent tables -----------------------------------------
-# generate set of dependent tables for each sample from posterior distribution (parameters)
+# generate set of independent tables for each sample from posterior distribution (parameters)
 sampled_tables <- sample_tables(df.behav, ind_trials, 
-                                posterior_samples.ind %>% filter(Iteration <= 100),
+                                posterior_samples.ind %>% filter(Iteration <= 25),
   here("webppl-model", "posterior-independent-data.wppl")
 )
 save_data(sampled_tables, 
           paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
 
-sampled_tables.evs <- sample_tables(
-  df.behav, ind_trials, 
-  posterior_means %>% 
-    unite("name", par, prob, sep="_") %>% 
-    pivot_wider(names_from = "name", values_from = "mean"),
-  here("webppl-model", "posterior-independent-data.wppl"),
-  repetitions = 20
-)
-save_data(sampled_tables.evs, 
-          paste(target_dir, "sampled-tables-evs-posterior.rds", sep=FS))
-
+# sampled_tables.evs <- sample_tables(
+#   df.behav, ind_trials, 
+#   posterior_means %>% 
+#     unite("name", par, prob, sep="_") %>% 
+#     pivot_wider(names_from = "name", values_from = "mean"),
+#   here("webppl-model", "posterior-independent-data.wppl"),
+#   repetitions = 20
+# )
 
 # plot new tables sampled for each independent context with observed data
 make_pp_plots = function(df.behav, trials, sampled_tables, target_dir, fn_prefix){
@@ -313,28 +311,7 @@ make_pp_plots = function(df.behav, trials, sampled_tables, target_dir, fn_prefix
   })
   return(pp_plots)
 }
-pp_plots <- make_pp_plots(df.behav, ind_trials, #[ind_trials != "independent_hh"], 
-                          sampled_tables, target_dir, "pp-tables")
-pp_plots <- make_pp_plots(df.behav, ind_trials, 
-                          sampled_tables.evs, target_dir, "pp-tables-evs")
-
-# for independent_hh: (¬b¬g really small in sampled tables..!)
-df.trial <- df.behav %>% filter(id == "independent_hh")
-df.samples <- sampled_tables %>% filter(id == "independent_hh")
-tit <- trial_names[["independent_hh"]]
-plots.ind_hh = map(c("AC", "A-C", "-AC", "-A-C"), function(world){
-  y <- df.trial[[world]]
-  yrep <- df.samples %>%
-    dplyr::select(all_of(c(world))) %>% as.matrix() %>% 
-    matrix(nrow=400, ncol=nrow(df.trial), byrow=T)
-  lab_x = switch(world, "AC"="bg", "A-C"="b¬g", "-AC"="¬bg", "-A-C"="¬b¬g")
-  p <- ppc_dens_overlay(y = y, yrep = yrep) +
-    labs(title = "ind:HH", x=lab_x)
-  fn <- paste(target_dir,
-              paste("pp-tables_independent_hh_", world, ".png",
-                    sep=""), sep=FS)
-  ggsave(fn, p, width=7, height=5)
-})
+pp_plots <- make_pp_plots(df.behav, ind_trials, sampled_tables, target_dir, "pp-tables100")
 
 
 # Posterior predictive ----------------------------------------------------
@@ -382,7 +359,7 @@ p <- pp_samples_ll %>%
 p
 ggsave(paste(target_dir, "pp-log-likelihood-independent.png", sep = FS), p)
 
-# log likelihood seperate for P(b), P(g) and P(b,g)
+# log likelihood separate for P(b), P(g) and P(b,g)
 pp_samples_ll.long <- pp_samples_ll %>%
   pivot_longer(cols = c(-id,-x_blue, -x_green, -x_bg), 
                names_to = "prob", names_prefix = "ll_", values_to = "ll")
