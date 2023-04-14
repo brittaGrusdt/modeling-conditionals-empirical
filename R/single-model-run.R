@@ -29,15 +29,7 @@ params <- prepare_data_for_wppl(config_cns = config_cns,
 
 # use MAP-parameters
 speaker_model <- "pragmatic_gamma"
-if(str_split(speaker_model, "_")[[1]][1] != 
-   str_split(config_speaker_type, "_")[[1]][1]) stop("mismatch speaker model and speaker type")
-
-Sys.setenv(R_CONFIG_ACTIVE = paste("MAP", speaker_model, sep="_"))
-pars.speaker_model <- config::get()
-params$alpha <- pars.speaker_model$alpha
-params$theta <- pars.speaker_model$theta
-params$gamma <- pars.speaker_model$gamma
-
+add_MAP_params(params, speaker_model, config_speaker_type)
 
 model <- "var rsa_predictions = run_rsa_model(data)
 rsa_predictions

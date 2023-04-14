@@ -33,11 +33,12 @@ get_assertable_utterances = function(tbls.wide, theta){
 
 # utt_costs is a tibble with columns 'utterance', 'cost'
 prepare_data_for_wppl <- function(config_cns = "default_cns", 
-                                  config_weights_relations = "semi_informative",
+                                  config_weights_relations = "flat_dependent",
                                   config_speaker_type = "pragmatic",
                                   config_fits = NA,
                                   utt_costs = NA,
-                                  extra_packages = NA
+                                  extra_packages = NA, 
+                                  no_weights = FALSE
                                   ){
   
   # retrieve default params
@@ -120,30 +121,33 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
   }
   
   # 10. weights for each context and RSA-state
-  fn_weights <- "weights_ci.rds"
-  path_weights <- paste(config_dir, fn_weights, sep=FS)
-  if(file.exists(path_weights)) {
-    params$weights <- readRDS(path_weights) %>% dplyr::select(-cn, -n_rsa_states)
-  } else {
-    # compute weights
-    weights_ci = run_webppl(params$wppl_weights, params) %>% 
-      bind_rows(.id = "id") %>% group_by(id) %>% arrange(desc(probs)) %>% 
-      unnest(c(support)) %>% 
-      unnest(c(table.probs, table.support)) %>% 
-      pivot_wider(names_from = table.support, values_from = table.probs) %>% 
-      group_by(id) %>% mutate(cdf = cumsum(probs)) %>% 
-      add_column(prior_r = config_weights_relations)
-    
-    params$weights <- weights_ci
-    save_data(weights_ci %>% add_column(n_rsa_states = params$nb_rsa_states),
-              path_weights)
-    
+  if(!no_weights){
+    fn_weights <- "weights_ci.rds"
+    path_weights <- paste(config_dir, fn_weights, sep=FS)
+    if(file.exists(path_weights)) {
+      params$weights <- readRDS(path_weights) %>% dplyr::select(-cn, -n_rsa_states)
+    } else {
+      message("compute weights...")
+      # compute weights
+      weights_ci = run_webppl(params$wppl_weights, params) %>% 
+        bind_rows(.id = "id") %>% group_by(id) %>% arrange(desc(probs)) %>% 
+        unnest(c(support)) %>% 
+        unnest(c(table.probs, table.support)) %>% 
+        pivot_wider(names_from = table.support, values_from = table.probs) %>% 
+        group_by(id) %>% mutate(cdf = cumsum(probs)) %>% 
+        add_column(prior_r = config_weights_relations)
+      
+      params$weights <- weights_ci
+      save_data(weights_ci %>% add_column(n_rsa_states = params$nb_rsa_states),
+                path_weights)
+      
+    }
+    # add weights with state-ids
+    params$p_s_ci = left_join(
+      params$weights, 
+      params$prior_samples
+    )
   }
-  # add weights with state-ids
-  params$p_s_ci = left_join(
-    params$weights, 
-    params$prior_samples
-  )
   return(params)
 }
 
@@ -286,4 +290,14 @@ get_data_all_speakers = function(config_weights_relations, config_cns,
   return(data.speakers)
 }
 
-
+add_MAP_params = function(params, speaker_model, config_speaker_type){
+  if(str_split(speaker_model, "_")[[1]][1] != 
+     str_split(config_speaker_type, "_")[[1]][1]) stop("mismatch speaker model and speaker type")
+  
+  Sys.setenv(R_CONFIG_ACTIVE = paste("MAP", speaker_model, sep="_"))
+  pars.speaker_model <- config::get()
+  params$alpha <- pars.speaker_model$alpha
+  params$theta <- pars.speaker_model$theta
+  params$gamma <- pars.speaker_model$gamma
+  return(params)
+}

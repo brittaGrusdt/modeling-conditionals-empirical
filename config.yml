@@ -30,7 +30,7 @@ rsa_params:
                       "-A > -C", "-C > -A") 
   default_alpha: 3
   default_gamma: 1
-  default_theta: 0.7
+  default_theta: 0.9
   default_theta_might: 0
   nb_rsa_states: 500
   packages:  !expr c(paste("webppl-model", "node_modules", 
@@ -77,36 +77,6 @@ par_fit:
   alpha_theta_gamma: !expr c("alpha", "theta", "gamma")
   #use_drift_kernel: TRUE
 
-
-#default:
-  #dir_presampled_states: "presampled-states"
-  #fn_rsa_model: "default-model.wppl"
-  #fn_rsa_single_run: "model-single-run-by-contexts.wppl"
-  #fn_get_weights: "weights-subj-trial.wppl"
-  #fn_gen_utts: "utterances.wppl"
-  #fn_results: "results-speaker.rds"
-  #fn_params: "params-speaker.rds"
-  #generate_utterances: false
-  #states_presampled: true
-  # cost_conditional: 0
-  # cost_conjunction: 0
-  # cost_literal: 0
-  # cost_might: 0
-  # causal_nets_dep: !expr c("A implies C_unif-high-low",
-  #                          "C implies A_unif-high-low", 
-  #                          "-A implies C_unif-high-low",
-  #                          "-C implies A_unif-high-low")
-  # causal_nets_ind: !expr c("A || C_unif-unif")
-  #cns: !expr c("A implies C", "C implies A", "A implies -C", "C implies -A", "A || C")
-  #seed_webppl: !expr as.numeric(Sys.time())
-  #vars: !expr c("A", "C")
-  #level_max: "speaker"
-  # @arg utt: - if set to "p_delta" or "p_rooij", respective value must be
-  #           large (see in webppl file) for all states given to the speaker,
-  #           - if set to "" no condition, just sampled from prior as usual
-  #utt: ""
-  #utt_cost: 0
-
 cns:
   rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
   rels_ind: "A || C"
@@ -126,6 +96,20 @@ fine_grained_cns:
   dep_marginal: !expr c("unif")
   ind_a: !expr c("unif")
   ind_c: !expr c("unif")
+
+
+fine_grained_marginals:
+  inherits: cns
+  dep_causal_power: !expr c("high")
+  dep_noise: !expr c("low")
+  dep_marginal: !expr c("high", "low", "unc")
+  ind_a: !expr c("high", "low", "unc")
+  ind_c: !expr c("high", "low", "unc")
+  
+  
+fine_grained_marginals_single_dep: 
+  inherits: fine_grained_marginals
+  rels_dep: !expr c("A implies C")
 
 generate_utts:
   vars: !expr c("A", "C")

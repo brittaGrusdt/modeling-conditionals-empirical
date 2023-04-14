@@ -34,7 +34,7 @@ get_likelihood_params_fitted_data = function(){
 draw_states_from_prior = function(params){
   wppl_code <- "
     globalStore.n_prior_samples = data['nb_rsa_states'][0]
-    var prior = state_prior()
+    var prior = state_prior(model_tables)
     var distributions = {prior:  prior}
     distributions
   "
