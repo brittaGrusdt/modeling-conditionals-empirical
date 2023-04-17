@@ -13,14 +13,14 @@ library(scales)
 source(here("R", "helpers-plotting.R"))
 source(here("R", "helpers-load-data.R"))
 source(here("R", "helpers-rsa-model.R"))
-theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
+theme_set(theme_clean(base_size=24) + theme(legend.position = "top", text = element_text(size = 24)))
 
 # Setup -------------------------------------------------------------------
-config_cns = "fine_grained_cns"
+config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "flat_dependent"
 config_fits <- "alpha_theta"
-config_speaker_type <- "literal"# "pragmatic_utt_type"
+config_speaker_type <- "pragmatic_utt_type"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
                                 config_fits = config_fits,
                                 config_speaker_type = config_speaker_type,
@@ -348,7 +348,7 @@ data <- webppl(program_file = params$wppl_predictive_checks,
 save_data(data, paste(params$speaker_subfolder, 
                       "posterior-predictive-wppl-output.rds", sep=FS))
 # data <- readRDS(paste(params$speaker_subfolder,
-#                       "posterior-predictive-wppl-output.rds", sep=FS))
+#                        "posterior-predictive-wppl-output.rds", sep=FS))
 
 # add predictions as often as param combi occurred
 if("gamma" %in% params$par_fit){
@@ -465,6 +465,9 @@ joint_data <- left_join(
              upper.emp = case_when(is.na(upper.emp) ~ 0, T ~ upper.emp)) %>% 
   chunk_utterances()  %>% 
   mutate(label_id = map_chr(id, get_str_contexts))
+save_data(joint_data, 
+          paste(params$speaker_subfolder, "joint_data-pp-observed-freq.rds", sep=FS))
+# joint_data <- readRDS( paste(params$speaker_subfolder, "joint_data-pp-observed-freq.rds", sep=FS))
                                 
 
 make_pred_plot = function(df.joint, n_facets){
@@ -485,27 +488,30 @@ make_pred_plot = function(df.joint, n_facets){
                alpha = 0.5, size=3) + 
     scale_color_manual(name = "utterance", values = UTT_COLORS) +
     scale_fill_manual(name = "utterance", values = UTT_COLORS) +
-    theme(legend.text = element_text(size=20), 
-          legend.title = element_text(size=20),
-          strip.text.x = element_text(size = 20),
-          axis.text.x = element_text(size = 20)) + 
+    theme_minimal(base_size=24) + 
+    theme(legend.position = "top", 
+          text = element_text(size = 24), 
+          legend.text = element_text(size = 24),
+          legend.title = element_text(size = 24),
+          strip.text.x = element_text(size = 24),
+          axis.text = element_text(size = 24)) +
+    theme(panel.spacing = unit(2, "lines")) + 
     guides(color = guide_legend(title.position = "top")) +
     guides(fill = guide_legend(title.position = "top")) +
     facet_wrap(~label_id, ncol = n_facets, labeller = label_parsed) +
-    xlab("prediction") + ylab("data")
+    xlab("prediction") + ylab("observation")
   return(p)
 }
 
 prediction_plots_all <- map(c("if1", "if2", "independent"), function(rel){
   ncol <- switch(rel, "if1"=4, "if2"=4, "independent"=5)
   df.rel <- joint_data %>% filter(str_detect(id, rel)) #%>% filter(estimate.pp < 0.1)
-  p <-  make_pred_plot(df.rel, ncol) +
-    theme(axis.text.x = element_text(size = 16))
+  p <-  make_pred_plot(df.rel, ncol)
   # save legend separately once
   if(rel == "if1"){
     legend <- cowplot::get_legend(p)
     ggsave(filename = paste(params$speaker_subfolder, FS, "utterances-legend.png", sep=""),
-           legend, width=21, height=2)
+           legend, width=23.5, height=2.25)
   }
   p <- p + theme(legend.position = "none")
   ggsave(filename = paste(params$speaker_subfolder, FS, rel, ".png", sep=""), p, 
@@ -558,7 +564,7 @@ write_csv(evidence_model, paste(params$speaker_subfolder, "evidence_model.csv", 
 # Plots across speaker types ----------------------------------------------
 # Log-likelihood plots 
 config_weights_relations <- "flat_dependent"
-config_cns = "fine_grained_cns"
+config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
                                 extra_packages = extra_packages)
@@ -611,15 +617,16 @@ pp.ll.speakers <- get_data_all_speakers(config_weights_relations, config_cns,
 p.pp_ll_speakers <- pp.ll.speakers %>% 
   # filter(!endsWith(speaker_model, ".gamma")) %>% 
   mutate(label_id = map_chr(id, get_str_contexts)) %>% 
-  ggplot(aes(x=label_id, y=neg_ll_ci, color=speaker_model)) + 
+  ggplot(aes(x=label_id, y=ll_ci, color=speaker_model)) + 
   geom_boxplot() +
   scale_x_discrete(labels = label_parse()) +
   scale_color_manual(name = "speaker model", values = SPEAKER_COLORS) +
-  labs(x="context", y = "negative log likelihood")
+  labs(x="context", y = "log likelihood")
 p.pp_ll_speakers
 ggsave(filename = here("results", "default-prior", 
                        paste(config_weights_relations, "-", config_cns, "-500", sep=""),
-                       "pp_ll_speakers.png"), p.pp_ll_speakers)
+                       "pp_ll_speakers.png"), p.pp_ll_speakers, 
+       width = 15, height = 8)
 
 # MAP-values for each context
 MAP.contexts <- get_data_all_speakers(
@@ -797,7 +804,7 @@ freq_utts.ind_ul = df.observed %>% filter(estimate > 0.05 & id == "ind:UL")
 # Posterior Predictives all speakers --------------------------------------
 # prediction of conditionals
 config_weights_relations <- "flat_dependent"
-config_cns = "fine_grained_cns"
+config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 pp.speakers <- get_data_all_speakers(config_weights_relations,
                                      config_cns,
@@ -837,8 +844,7 @@ p.hdis.pragmatic <- hdis.pragmatic %>%
 p.hdis.pragmatic  
 
 ggsave(paste(params$config_dir, "hdis-pp-pragmatic-models.png", 
-             sep=FS), 
-       p.hdis.pragmatic)
+             sep=FS), width = 15, plot = p.hdis.pragmatic)
 
 # check neg log likelihood ind:UL -----------------------------------------
 levels_utts <- c("-A", "A", "-C", "C", 

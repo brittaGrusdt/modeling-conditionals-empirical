@@ -12,7 +12,7 @@ source(here("R", "helpers-rsa-model.R"))
 theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
 
 # Setup -------------------------------------------------------------------
-config_cns = "fine_grained_cns"
+config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "flat_dependent"
 config_speaker_type = "pragmatic_utt_type"
@@ -81,6 +81,8 @@ plot_model_vs_data_bars(production.joint,
                         str_flatten(c("alpha", params$alpha, "theta", 
                                       params$theta), collapse="_"), 
                         by_utt_type = F)
+
+
 
 ###############################################################################
 # new prediction based on repeatedly drawn N_participants states from 

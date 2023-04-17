@@ -125,10 +125,17 @@ var non_normalized_posterior = function() {
 
   factor(summed_log_likelihood)
 
-  query.add("utts", params.utt_cost)
-  query.add("alpha", params.alpha)
+  //query.add("utts", params.utt_cost)
+  //query.add("alpha", params.alpha)
   query.add("theta", params.theta)
-  query.add("gamma", params.gamma)
+
+  if(PARAMS_TO_FIT.includes("gamma")){
+    query.add("gamma", params.gamma)
+  }
+  if(speaker_type != "literal"){
+    query.add("alpha", params.alpha)
+  }
+
   return(query)
 
   // I dont know why but if I return the object 'params' directly, I only

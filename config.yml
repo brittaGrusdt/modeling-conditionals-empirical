@@ -89,14 +89,11 @@ default_cns:
   ind_a: !expr c("unif")
   ind_c: !expr c("unif")
   
-fine_grained_cns:
-  inherits: cns
+# used in Thesis!
+fine_grained_dep_cns:
+  inherits: default_cns
   dep_causal_power: !expr c("high", "unc")
   dep_noise: !expr c("low", "unc")
-  dep_marginal: !expr c("unif")
-  ind_a: !expr c("unif")
-  ind_c: !expr c("unif")
-
 
 fine_grained_marginals:
   inherits: cns

@@ -19,7 +19,7 @@ cell_names <- c(
 )
 colors <- c(`empirical slider ratings` = "darkgreen", `model states` = "firebrick")
 # Setup -------------------------------------------------------------------
-config_cns = "fine_grained_cns"
+config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "semi_informative"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
