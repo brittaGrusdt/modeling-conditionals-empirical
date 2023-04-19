@@ -19,18 +19,18 @@ theme_set(theme_clean(base_size=24) +
 config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "flat_dependent"
-config_speaker_type <-  "pragmatic_utt_type"
-config_fits <- "alpha_theta_gamma"
+config_speaker_type <- "pragmatic_utt_type"
+config_fits <- "alpha_theta"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 config_fits = config_fits,
                                 config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
-mcmc_params <- tibble(n_samples = 5000, n_burn = 5000, n_lag = 8, n_chains = 4)
+mcmc_params <- tibble(n_samples = 5000, n_burn = 10000, n_lag = 10, n_chains = 4)
 posterior <- webppl(program_file = params$wppl_fit_rsa, 
                     data_var = "data",
                     model_var = "non_normalized_posterior",
                     data = params,
-                    inference_opts = list(method = "incrementalMH",
+                    inference_opts = list(method = "MCMC", #"incrementalMH",
                                           samples = mcmc_params$n_samples,
                                           burn = mcmc_params$n_burn,
                                           lag = mcmc_params$n_lag,
@@ -44,29 +44,37 @@ posterior_samples <- posterior %>% unnest(c(value)) %>%
   mutate(Chain = as.factor(Chain)) %>% 
   add_column(mcmc = list(mcmc_params), nb_rsa_states = params$nb_rsa_states)
 
+mcmc_folder <- paste(params$speaker_subfolder, FS,  
+                     mcmc_params$n_samples,"-samples-", 
+                     mcmc_params$n_burn, "-burn-", 
+                     mcmc_params$n_lag, "-lag", sep="")
+if(!dir.exists(here(mcmc_folder))) dir.create(mcmc_folder)
 save_data(posterior_samples %>% 
             add_column(config_prior_r = config_weights_relations, 
                        config_cns = config_cns), 
-          here(params$speaker_subfolder, "mcmc-posterior-5000.rds"))
-# posterior_samples <- readRDS(here(params$speaker_subfolder, "mcmc-posterior-5000.rds")) 
+          paste(mcmc_folder, "mcmc-posterior.rds", sep = FS))
+# posterior_samples <- readRDS(here(mcmc_folder, "mcmc-posterior.rds")) 
+
+
 
 if(str_detect(config_fits, "gamma")){
   pars <- c("theta", "gamma")
-} 
+} else {
+  pars <- c("theta")
+}
 if(config_speaker_type != "literal"){
   pars <- c(pars, "alpha")
-}
+} 
 # check pairs plot
 df.posterior <- posterior_samples %>% dplyr::select(Chain, Iteration, Parameter, value) %>% 
   pivot_wider(names_from = "Parameter", values_from = "value", values_fn = list) %>% 
   unnest(all_of(pars)) %>%
   mutate(Chain = as.integer(Chain))
 
-if(config_speaker_type != "literal"){
+if(str_detect(config_fits, "gamma") || config_speaker_type != "literal"){
   color_scheme_set("blue")
   p.pairs <- mcmc_pairs(df.posterior %>% dplyr::select(-Iteration))
-  p.pairs
-  ggsave(here(params$speaker_subfolder, "pairs.png"), p.pairs)
+  ggsave(here(mcmc_folder, "pairs.png"), p.pairs)
 }
   
 df.diagnostics <- df.posterior %>%  
@@ -74,11 +82,13 @@ df.diagnostics <- df.posterior %>%
   posterior::as_draws_matrix() %>% 
   posterior::summarise_draws()
 df.diagnostics
+write_csv(df.diagnostics, here(mcmc_folder, "diagnostics.csv"))
 
 # chain plot, iteration vs. value for each chain
 p.chain <- mcmc_trace(df.posterior %>% dplyr::select(-Iteration), 
                       facet_args = list(labeller = as_labeller(
-                        x = c('alpha' = 'alpha', 'theta' = 'theta'), 
+                        x = c('alpha' = 'alpha', 'theta' = 'theta', 
+                              'gamma' = 'gamma'), 
                         default = label_parsed)
                         )) + theme(legend.position = "top") 
 p.chain
@@ -88,7 +98,7 @@ p_chain = posterior_samples %>%
   geom_line() + 
   facet_wrap(~Parameter, scales = "free", labeller = label_parsed, ncol = 3) 
 p_chain
-ggsave(here(params$speaker_subfolder, "chains.png"), p_chain)
+ggsave(here(mcmc_folder, "chains.png"), p_chain)
 
 # plot posterior densities
 p.density_posterior = posterior_samples %>% 
@@ -98,7 +108,7 @@ p.density_posterior = posterior_samples %>%
   geom_density() + 
   facet_wrap(~Parameter, scales = "free", labeller = label_parsed, ncol = 4)
 p.density_posterior
-ggsave(here(params$speaker_subfolder, "density_posterior.png"), p.density_posterior)
+ggsave(here(mcmc_folder, "density_posterior.png"), p.density_posterior)
 
 # posterior with highest density intervals
 hdis.mean_posterior <- mean_hdi(posterior_samples %>% group_by(Parameter), value)
@@ -116,14 +126,13 @@ p.posterior_hdis <-
   geom_point(data=hdis.mean_posterior, aes(x=value, y=0), color='black', size=2.5) +
   theme(panel.spacing = unit(2, "lines"))
 p.posterior_hdis  
-ggsave(here(params$speaker_subfolder, "density_posterior_hdis.png"), p.posterior_hdis)
+ggsave(here(mcmc_folder, "density_posterior_hdis.png"), p.posterior_hdis)
 
 # expected values
 params_evs <- posterior_samples %>% group_by(Parameter) %>% 
   summarize(value = mean(value), .groups = "drop_last") %>%
   mutate(Parameter=str_replace(Parameter, "utts.", ""))
 params_evs %>% pivot_wider(names_from = "Parameter", values_from = "value") 
-
 
 
 
