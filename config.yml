@@ -77,6 +77,12 @@ par_fit:
   alpha_theta_gamma: !expr c("alpha", "theta", "gamma")
   #use_drift_kernel: TRUE
 
+mcmc_default_params:
+  n_samples: 5000
+  n_burn: 10000
+  n_lag: 10
+  n_chains: 4
+
 cns:
   rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
   rels_ind: "A || C"

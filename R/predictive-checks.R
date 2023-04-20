@@ -161,8 +161,8 @@ prior_predictive <- rsa_data %>% imap(function(x, id){
   group_by(sample_id)
 prior_predictive$idx <- group_indices(prior_predictive)
 save_data(prior_predictive, 
-          paste(params$speaker_subfolder, "prior-predictive.rds", sep=FS))
-# prior_predictive <- readRDS(paste(params$speaker_subfolder, "prior-predictive.rds", sep=FS))
+          paste(params$speaker_mcmc_folder, "prior-predictive.rds", sep=FS))
+# prior_predictive <- readRDS(paste(params$speaker_mcmc_folder, "prior-predictive.rds", sep=FS))
 
 ################################################################################
 # Plots -------------------------------------------------------------------
@@ -325,7 +325,7 @@ pp.ll %>%
 ################################################################################
 # Posterior predictive ----------------------------------------------------
 # get samples from posterior distribution
-posterior_samples <- readRDS(paste(params$speaker_subfolder,
+posterior_samples <- readRDS(paste(params$speaker_mcmc_folder,
                                    "mcmc-posterior.rds", sep=FS)) %>% 
   format_param_samples() 
 # expected values
@@ -345,9 +345,9 @@ data <- webppl(program_file = params$wppl_predictive_checks,
                data_var = "data",
                random_seed = params$seed_webppl,
                packages = params$packages)
-save_data(data, paste(params$speaker_subfolder, 
+save_data(data, paste(params$speaker_mcmc_folder, 
                       "posterior-predictive-wppl-output.rds", sep=FS))
-# data <- readRDS(paste(params$speaker_subfolder,
+# data <- readRDS(paste(params$speaker_mcmc_folder,
 #                        "posterior-predictive-wppl-output.rds", sep=FS))
 
 # add predictions as often as param combi occurred
@@ -393,8 +393,8 @@ posterior_predictive <- data %>% imap(function(x, sample_id){
   return(df.predictions)
 }) %>% bind_rows()
 save_data(posterior_predictive, 
-          paste(params$speaker_subfolder, "posterior-predictive.rds", sep=FS))
-# posterior_predictive <- readRDS(paste(params$speaker_subfolder, "posterior-predictive.rds", sep=FS))
+          paste(params$speaker_mcmc_folder, "posterior-predictive.rds", sep=FS))
+# posterior_predictive <- readRDS(paste(params$speaker_mcmc_folder, "posterior-predictive.rds", sep=FS))
 
 
 # Plots Posterior + Prior predictives -------------------------------------
@@ -440,7 +440,7 @@ map(TRIALS, function(trial){
     theme(axis.text.x = element_text(size=8), axis.text.y = element_text(size=8)) +
     scale_fill_brewer(name = "distribution", palette = "Set1") +
     labs(x = "predicted probability", y="count", title = get_name_context(trial))
-  ggsave(paste(params$speaker_subfolder, FS, 
+  ggsave(paste(params$speaker_mcmc_folder, FS, 
                "predictive-checks-", trial, ".png", sep=""), 
          p, width = 10, height = 10)
 })
@@ -466,8 +466,8 @@ joint_data <- left_join(
   chunk_utterances()  %>% 
   mutate(label_id = map_chr(id, get_str_contexts))
 save_data(joint_data, 
-          paste(params$speaker_subfolder, "joint_data-pp-observed-freq.rds", sep=FS))
-# joint_data <- readRDS( paste(params$speaker_subfolder, "joint_data-pp-observed-freq.rds", sep=FS))
+          paste(params$speaker_mcmc_folder, "joint_data-pp-observed-freq.rds", sep=FS))
+# joint_data <- readRDS( paste(params$speaker_mcmc_folder, "joint_data-pp-observed-freq.rds", sep=FS))
                                 
 
 make_pred_plot = function(df.joint, n_facets){
@@ -510,11 +510,11 @@ prediction_plots_all <- map(c("if1", "if2", "independent"), function(rel){
   # save legend separately once
   if(rel == "if1"){
     legend <- cowplot::get_legend(p)
-    ggsave(filename = paste(params$speaker_subfolder, FS, "utterances-legend.png", sep=""),
+    ggsave(filename = paste(params$speaker_mcmc_folder, FS, "utterances-legend.png", sep=""),
            legend, width=23.5, height=2.25)
   }
   p <- p + theme(legend.position = "none")
-  ggsave(filename = paste(params$speaker_subfolder, FS, rel, ".png", sep=""), p, 
+  ggsave(filename = paste(params$speaker_mcmc_folder, FS, rel, ".png", sep=""), p, 
          width=21, height=6)
   return(p)
 })
@@ -523,19 +523,19 @@ prediction_plots_all <- map(c("if1", "if2", "independent"), function(rel){
 # Log likelihoods ---------------------------------------------------------
 posterior_predictive.ll = posterior_predictive %>%
   distinct_at(vars(c(id, ll_ci, sample_id, idx))) 
-save_data(posterior_predictive.ll, paste(params$speaker_subfolder, 
+save_data(posterior_predictive.ll, paste(params$speaker_mcmc_folder, 
                                          "posterior_predictive_ll.rds", 
                                          sep=FS))
 
 # expected log likelihoods posterior
 evs_ll <- get_ev_log_likelihood(posterior_predictive, config_speaker_type)
-write_csv(evs_ll, paste(params$speaker_subfolder, "evs-log-likelihood-ci.csv", sep=FS))
+write_csv(evs_ll, paste(params$speaker_mcmc_folder, "evs-log-likelihood-ci.csv", sep=FS))
 # log likelihood for MAP values across contexts
 map_ll <- get_log_likelihood_MAP(posterior_predictive, 
                                  posterior_samples,
                                  config_speaker_type, 
                                  params$par_fit)
-write_csv(map_ll, paste(params$speaker_subfolder, "MAP-log-likelihoods.csv", sep=FS))
+write_csv(map_ll, paste(params$speaker_mcmc_folder, "MAP-log-likelihoods.csv", sep=FS))
 
 # log likelihood for MAP values separately for each context
 map_ll.contexts <- map(TRIALS, function(c){
@@ -546,7 +546,7 @@ map_ll.contexts <- map(TRIALS, function(c){
   return(map_ll)
 }) %>% bind_rows() %>% arrange(id)
 write_csv(map_ll.contexts, 
-          paste(params$speaker_subfolder, "MAP-log-likelihood-ci.csv", sep=FS))
+          paste(params$speaker_mcmc_folder, "MAP-log-likelihood-ci.csv", sep=FS))
 
 
 
@@ -558,7 +558,7 @@ evidence_model = posterior_predictive %>%
   dplyr::select(ll_ci, id, idx) %>% distinct() %>% 
   group_by(idx) %>% summarize(ll = sum(ll_ci)) %>% 
   summarize(evidence = mean(ll))
-write_csv(evidence_model, paste(params$speaker_subfolder, "evidence_model.csv", sep=FS))
+write_csv(evidence_model, paste(params$speaker_mcmc_folder, "evidence_model.csv", sep=FS))
 
 
 # Plots across speaker types ----------------------------------------------

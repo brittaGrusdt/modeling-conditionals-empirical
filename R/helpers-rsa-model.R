@@ -38,7 +38,8 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
                                   config_fits = NA,
                                   utt_costs = NA,
                                   extra_packages = NA, 
-                                  no_weights = FALSE
+                                  no_weights = FALSE, 
+                                  mcmc_params = "mcmc_default_params"
                                   ){
   
   # retrieve default params
@@ -118,6 +119,17 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
     params$speaker_subfolder <- sp_subfolder
     params$fit_dir <- str_replace(sp_subfolder, 
                                   paste(FS, config_speaker_type, sep=""), "")
+    # add default (or provided) mcmc-params
+    Sys.setenv(R_CONFIG_ACTIVE =  mcmc_params)
+    pars.mcmc <- config::get()
+    params$mcmc <-  pars.mcmc
+    params$speaker_mcmc_folder <- paste(params$speaker_subfolder, FS,  
+                                        pars.mcmc$n_samples,"-samples-", 
+                                        pars.mcmc$n_burn, "-burn-", 
+                                        pars.mcmc$n_lag, "-lag", sep="")
+    if(!dir.exists(here(params$speaker_mcmc_folder))){
+      dir.create(params$speaker_mcmc_folder, recursive=T)
+    }
   }
   
   # 10. weights for each context and RSA-state

@@ -25,35 +25,29 @@ params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 config_fits = config_fits,
                                 config_speaker_type = config_speaker_type,
                                 extra_packages = extra_packages)
-mcmc_params <- tibble(n_samples = 5000, n_burn = 10000, n_lag = 10, n_chains = 4)
 posterior <- webppl(program_file = params$wppl_fit_rsa, 
                     data_var = "data",
                     model_var = "non_normalized_posterior",
                     data = params,
                     inference_opts = list(method = "MCMC", #"incrementalMH",
-                                          samples = mcmc_params$n_samples,
-                                          burn = mcmc_params$n_burn,
-                                          lag = mcmc_params$n_lag,
+                                          samples = params$mcmc$n_samples,
+                                          burn = params$mcmc$n_burn,
+                                          lag = params$mcmc$n_lag,
                                           verbose = T),
                     packages = params$packages, 
-                    chains = mcmc_params$n_chains, 
-                    cores = mcmc_params$n_chains
+                    chains = params$mcmc$n_chains, 
+                    cores = params$mcmc$n_chains
                     ) %>% as_tibble()
 
 posterior_samples <- posterior %>% unnest(c(value)) %>% 
   mutate(Chain = as.factor(Chain)) %>% 
-  add_column(mcmc = list(mcmc_params), nb_rsa_states = params$nb_rsa_states)
+  add_column(mcmc = list(params$mcmc), nb_rsa_states = params$nb_rsa_states)
 
-mcmc_folder <- paste(params$speaker_subfolder, FS,  
-                     mcmc_params$n_samples,"-samples-", 
-                     mcmc_params$n_burn, "-burn-", 
-                     mcmc_params$n_lag, "-lag", sep="")
-if(!dir.exists(here(mcmc_folder))) dir.create(mcmc_folder)
 save_data(posterior_samples %>% 
             add_column(config_prior_r = config_weights_relations, 
                        config_cns = config_cns), 
-          paste(mcmc_folder, "mcmc-posterior.rds", sep = FS))
-# posterior_samples <- readRDS(here(mcmc_folder, "mcmc-posterior.rds")) 
+          paste(params$speaker_speaker_mcmc_folder, "mcmc-posterior.rds", sep = FS))
+# posterior_samples <- readRDS(here(params$speaker_mcmc_folder, "mcmc-posterior.rds")) 
 
 
 
@@ -74,7 +68,7 @@ df.posterior <- posterior_samples %>% dplyr::select(Chain, Iteration, Parameter,
 if(str_detect(config_fits, "gamma") || config_speaker_type != "literal"){
   color_scheme_set("blue")
   p.pairs <- mcmc_pairs(df.posterior %>% dplyr::select(-Iteration))
-  ggsave(here(mcmc_folder, "pairs.png"), p.pairs)
+  ggsave(here(params$speaker_mcmc_folder, "pairs.png"), p.pairs)
 }
   
 df.diagnostics <- df.posterior %>%  
@@ -82,7 +76,7 @@ df.diagnostics <- df.posterior %>%
   posterior::as_draws_matrix() %>% 
   posterior::summarise_draws()
 df.diagnostics
-write_csv(df.diagnostics, here(mcmc_folder, "diagnostics.csv"))
+write_csv(df.diagnostics, here(params$speaker_mcmc_folder, "diagnostics.csv"))
 
 # chain plot, iteration vs. value for each chain
 p.chain <- mcmc_trace(df.posterior %>% dplyr::select(-Iteration), 
@@ -98,7 +92,7 @@ p_chain = posterior_samples %>%
   geom_line() + 
   facet_wrap(~Parameter, scales = "free", labeller = label_parsed, ncol = 3) 
 p_chain
-ggsave(here(mcmc_folder, "chains.png"), p_chain)
+ggsave(here(params$speaker_mcmc_folder, "chains.png"), p_chain)
 
 # plot posterior densities
 p.density_posterior = posterior_samples %>% 
@@ -108,7 +102,7 @@ p.density_posterior = posterior_samples %>%
   geom_density() + 
   facet_wrap(~Parameter, scales = "free", labeller = label_parsed, ncol = 4)
 p.density_posterior
-ggsave(here(mcmc_folder, "density_posterior.png"), p.density_posterior)
+ggsave(here(params$speaker_mcmc_folder, "density_posterior.png"), p.density_posterior)
 
 # posterior with highest density intervals
 hdis.mean_posterior <- mean_hdi(posterior_samples %>% group_by(Parameter), value)
@@ -126,7 +120,7 @@ p.posterior_hdis <-
   geom_point(data=hdis.mean_posterior, aes(x=value, y=0), color='black', size=2.5) +
   theme(panel.spacing = unit(2, "lines"))
 p.posterior_hdis  
-ggsave(here(mcmc_folder, "density_posterior_hdis.png"), p.posterior_hdis)
+ggsave(here(params$speaker_mcmc_folder, "density_posterior_hdis.png"), p.posterior_hdis)
 
 # expected values
 params_evs <- posterior_samples %>% group_by(Parameter) %>% 
