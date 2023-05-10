@@ -7,7 +7,12 @@ library(scales)
 library(tidyverse)
 library(ExpDataWrangling)
 library(ggthemes)
-theme_set(theme_clean(base_size=20) + theme(legend.position = "top"))
+
+# Behavioral Plots for Thesis!  
+theme_set(theme_clean(base_size=26) + 
+            theme(legend.position = "top", 
+                  axis.text = element_text(size = 26),
+                  axis.title = element_text(size = 26)))
 
 path_cleaned_data = here("data", "cleaned-data.csv")
 
@@ -113,7 +118,7 @@ p.means_pe = pe_task.means %>%
                                       "ind")
                            )) %>% 
   ggplot(aes(x = id,  color = world, group = world)) +
-  geom_point(aes(y = pe_task)) + geom_line(aes(y = pe_task)) +
+  geom_point(aes(y = pe_task)) + geom_line(aes(y = pe_task), size=1.25) +
   scale_x_discrete(labels = c(`if1_hh` = parse(text = TeX('$HI$')),
                        `if1_lh` = parse(text = TeX('$LI$')),
                        `if1_u-Lh` = parse(text = TeX('$U^-I$')),
@@ -129,13 +134,18 @@ p.means_pe = pe_task.means %>%
                        `ind_ll` = 'LL'
                      )
   ) +
-  geom_errorbar(data = bootstrapped.pe, aes(ymin = lower, ymax = upper)) +
+  theme(text = element_text(size=18), 
+        legend.position = "none",
+        strip.text.x = element_text(size = 26),
+        strip.text.y = element_text(size = 26)) +
+  geom_errorbar(data = bootstrapped.pe, aes(ymin = lower, ymax = upper), 
+                size = 1.25) +
   facet_wrap(relation ~ world, scales = "free_x", ncol = 4,  
              labeller = labeller(relation = label_parsed)) +
   labs(y = "Mean estimates PE-task", x = "condition (context)")
 p.means_pe
 ggsave(paste(plot_dir, "mean-estimates-pe-task.png", sep = FS), 
-       p.means_pe, width = 14, height = 11)
+       p.means_pe, width = 20, height = 15)
 
 p.means_pe.ribbons = pe_task.means %>% 
   mutate(relation = factor(relation, levels = c("if1", "if2", "independent"), 
@@ -143,7 +153,7 @@ p.means_pe.ribbons = pe_task.means %>%
                                       parse(text = expression("if"[2])), 
                                       "ind"))) %>% 
   ggplot(aes(x = id,  color = world, group = world)) +
-  geom_point(aes(y = pe_task)) + geom_line(aes(y = pe_task)) +
+  geom_point(aes(y = pe_task)) + geom_line(aes(y = pe_task), size = 1.25) +
   scale_x_discrete(labels = 
                      c(`if1_hh` = parse(text = TeX('$HI$')),
                        `if1_lh` = parse(text = TeX('$LI$')),
@@ -159,7 +169,12 @@ p.means_pe.ribbons = pe_task.means %>%
                        `ind_ul` = 'UL',
                        `ind_ll` = 'LL'
                      )) +
-  geom_errorbar(data = bootstrapped.pe, aes(ymin = lower, ymax = upper)) +
+  theme(text = element_text(size=18), 
+        legend.position = "none",
+        strip.text.x = element_text(size = 26),
+        strip.text.y = element_text(size = 26)) +
+  geom_errorbar(data = bootstrapped.pe, aes(ymin = lower, ymax = upper), 
+                size = 1.25) +
   geom_ribbon(data = bootstrapped.pe, 
               aes(ymin = lower, ymax = upper, fill=world),
               alpha=0.5) +
@@ -169,7 +184,7 @@ p.means_pe.ribbons = pe_task.means %>%
   theme(text = element_text(size=18))
 p.means_pe.ribbons
 ggsave(paste(plot_dir, "mean-estimates-pe-task-ribbons.png", sep = FS), 
-       p.means_pe.ribbons, width = 16, height = 11)
+       p.means_pe.ribbons, width = 20, height = 15)
 
 
 
@@ -184,13 +199,16 @@ df.utt_freq$utt_f = factor(df.utt_freq$utt.standardized,
 
 p.utt_freq = df.utt_freq %>% ggplot(aes(y = utt_f, x = n)) + 
   geom_bar(aes(fill = utt_type), stat = "identity") +
-  scale_fill_brewer(name = "utterance type", palette = "Set2") +
-  geom_text(aes(label = n), hjust = -0.2, size=6) +
-  labs(y = "standardized utterance", x = "number selections") #+
+  scale_fill_brewer(name = "utterance type", palette = "Set2", 
+                    breaks = c("conjunction", "conditional", "might + literal", 
+                               "literal")) +
+  geom_text(aes(label = n), hjust = -0.05, size=8) +
+  labs(y = "standardized utterance", x = "number selections") +
+  theme(legend.position = c(0.9, 0.1), legend.justification = c(1, 0))
 # theme(text = element_text(size = 18))
 p.utt_freq
 ggsave(paste(plot_dir, "utterance-frequencies.png", sep = FS), p.utt_freq, 
-       width = 14, height = 6)
+       width = 19, height = 8)
 
 # 2. selections of standardized conditionals
 df.if = data.uc %>% filter(utt_type == "conditional") %>% 
@@ -222,11 +240,17 @@ p.ifs.standardized = df.if.standardized %>%
                        `independent_ll` = 'ind:LL'
                      )) +
   scale_fill_brewer(name = "selected (standardized) conditional", 
-                    palette = "Set2") +
-  guides(fill = guide_legend(ncol=2, title.position = "top"))# +
+                    palette = "Set2", 
+                    breaks = c("if blue does not fall green does not fall", 
+                               "if blue falls green falls", 
+                               "if green falls blue falls", 
+                               "if green does not fall blue falls", 
+                               "if blue does not fall green falls", 
+                               "if blue falls green does not fall")) +
+  guides(fill = guide_legend(ncol=2, title.position = "top"))
 p.ifs.standardized
 ggsave(paste(plot_dir, "conditionals-uc-task.png", sep=FS), p.ifs.standardized,
-       width = 11, height = 6)
+       width = 16, height = 6)
 
 
 
@@ -258,9 +282,10 @@ p.ratio_conditionals <- data.uc %>%
   mutate(ratio = num_conditionals / N) %>% 
   ggplot(aes(x = relation, group = prior_blue, color = prior_blue)) +
   geom_point(position = pd, aes(y=ratio)) + 
-  geom_line(position = pd, aes(y=ratio)) +
+  geom_line(position = pd, aes(y=ratio), size = 1.25) +
   geom_errorbar(data = pconditionals_bootstrapped,
-                position = pd, aes(ymin = lower, ymax = upper)
+                position = pd, aes(ymin = lower, ymax = upper),
+                size = 1.25
   ) +
   scale_x_discrete(limits = c("if1", "if2", "independent"), 
                    labels = 
@@ -337,13 +362,15 @@ df.utt_freq_by_rel = data.uc %>% ungroup() %>%
 p.pe_means_pe_utts = df.means_pe_utts.by_rel %>% 
   ggplot(aes(y = utt.standardized, color = relation)) + 
   geom_point(aes(x = mean_pe),
-             position = position_dodge(width=0.5)) + 
+             position = position_dodge(width=1)) + 
   facet_wrap(~utt_type, scales = "free_y") +
   geom_errorbar(data = data_bootstrapped_pe_uc, 
                 aes(xmin = lower, xmax = upper), 
-                position = position_dodge(width = 1)) +
+                position = position_dodge(width = 1), 
+                size = 1.25) +
   geom_text(data = df.utt_freq_by_rel, aes(x = 0.1, label = n), 
-            position = position_dodge(width=1), size=6) +
+            fontface = "bold", size = 8, 
+            position = position_dodge(width=1)) +
   scale_color_brewer(name = "relation", palette = "Set2", 
                      labels = c(`if1` = parse(text = expression("if"[1])),
                                 `if2` = parse(text = expression("if"[2])),
@@ -353,7 +380,7 @@ p.pe_means_pe_utts = df.means_pe_utts.by_rel %>%
 p.pe_means_pe_utts
 
 ggsave(paste(plot_dir, "pe_means_pe_utts.png", sep = FS), p.pe_means_pe_utts,
-       width = 14, height = 8)
+       width = 22, height = 13)
 
 # bootstrapped utterance ratios for each context
 get_mean_uc_ratios = function(data, i, utt){
@@ -379,6 +406,8 @@ bootstrapped_uc_ratios_ci = group_map(
   }) %>% bind_rows() 
 save_data(bootstrapped_uc_ratios_ci, here(params$dir_data, 
                                         "bootstrapped_uc_ratios_ci.rds"))
+# bootstrapped_uc_ratios_ci <- readRDS(here(params$dir_data, 
+                                # "bootstrapped_uc_ratios_ci.rds"))
 
 # estimated P(blue) vs. P(green) when conditional selected ----------------
 df.utt_freq_by_rel = data.uc %>% ungroup() %>% 
@@ -413,12 +442,13 @@ p.ant_vs_cons_ifbg = anti_join(df.ifbg, to_remove) %>%
   ggplot(aes(x = p_ant, y = p_cons)) + 
   geom_density_2d_filled(contour_var = "ndensity") +
   geom_point(alpha = 0.5) + xlim(0, 1) + ylim(0, 1) +
+  theme(strip.text.x = element_text(size = 26)) +
   facet_wrap(relation~utt.standardized, labeller = labeller(relation = label_parsed)) +
   labs(x = "Estimate P(blue falls)", y = "Estimate P(green falls)")
 p.ant_vs_cons_ifbg
 
 ggsave(paste(plot_dir, "pant_vs_pcons.png", sep = FS), p.ant_vs_cons_ifbg, 
-       width = 11, height = 7)
+       width = 14, height = 8)
 
 
 
@@ -447,7 +477,7 @@ p.bg_nbng_cost
 
 
 ggsave(paste(plot_dir, "bg_nbng_cost.png", sep = FS), p.bg_nbng_cost, 
-       width = 12, height = 3)
+       width = 16, height = 5)
 
 
 
