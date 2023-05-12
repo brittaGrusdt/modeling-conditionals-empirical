@@ -24,7 +24,7 @@ source(here("R", "helpers-dirichlet-regression.R"))
 source(here("R", "helpers-plotting.R"))
 
 # Setup -------------------------------------------------------------------
-theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
+theme_set(theme_clean(base_size = 26) + theme(legend.position = "top"))
 prob_names <- c("blue"="P(b)", "green" = "P(g)")
 # Data --------------------------------------------------------------------
 active_config = "pathes"

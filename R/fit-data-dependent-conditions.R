@@ -20,7 +20,11 @@ source(here("R", "helpers-data-models.R"))
 source(here("R", "helpers-plotting.R"))
 
 # for plots
-theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
+theme_set(theme_clean(base_size = 26) + 
+          theme(legend.position = "top", 
+                axis.text = element_text(size = 26),
+                axis.title = element_text(size = 26)))
+
 trial_names <- c("if1_hh"=expression("if"[1]*":HI"),
                  "if1_uh"=expression(paste(`if`[1], ":UI")),
                  "if1_u-Lh"=expression("if"[1]*":U"^-{}*"I"),
@@ -84,9 +88,9 @@ posterior_samples.dep = map_dfr(dep_trials, function(trial_id){
     data = data_webppl,
     packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
     inference_opts = list(method = "incrementalMH",
-                          samples = 3000,
-                          lag = 5,
-                          burn = 70000,
+                          samples = 5000,
+                          lag = 10,
+                          burn = 50000,
                           verbose = F),
     chains = 4, 
     cores = 4) %>%
@@ -97,6 +101,7 @@ posterior_samples.dep = map_dfr(dep_trials, function(trial_id){
   return(samples.posterior)
 })
 save_data(posterior_samples.dep, paste(target_dir, "posterior_samples.rds", sep=FS))
+# posterior_samples.dep <- readRDS(paste(target_dir, "posterior_samples.rds", sep=FS))
 
 # Chain Plots
 posterior_samples.long <- posterior_samples.dep %>% 
@@ -106,19 +111,23 @@ posterior_samples.long <- posterior_samples.dep %>%
 plots_chains = map(c("alpha", "gamma", "shape1", "shape2"), function(par){
   plots = map(c("blue", "if_bg", "if_nbg"), function(p) {
     fn <- paste(par, p, sep="_")
-    p <- posterior_samples.long %>% 
-      filter(startsWith(param, fn)) %>% 
-      ggplot(aes(x=Iteration, y = value, color=Chain, group = Chain)) + 
+    p <- posterior_samples.long %>%
+      filter(startsWith(param, fn)) %>%
+      ggplot(aes(x=Iteration, y = value, color=Chain, group = Chain)) +
+      theme(axis.text = element_text(size = 18)) +
       geom_line() + facet_wrap(id~param, scales="free")
-    ggsave(paste(target_dir, FS, paste("chains_", fn, ".png", sep = ""), sep=""), p)
-    p2 <- posterior_samples.long %>% 
-      filter(startsWith(param, fn)) %>% 
-      ggplot(aes(x=value, color=Chain, group = Chain)) + 
-      geom_density() + 
-      facet_wrap(id~param, scales="free", 
-                 labeller = labeller(id = trial_names))
-    ggsave(paste(target_dir, FS, 
-                 paste("chains_marginal_", fn, ".png", sep = ""), sep=""), p2)
+    ggsave(paste(target_dir, FS, paste("chains_", fn, ".png", sep = ""), sep=""),
+           p, width = 15, height = 11)
+    p2 <- posterior_samples.long %>%
+      filter(startsWith(param, fn)) %>%
+      ggplot(aes(x=value, color=Chain, group = Chain)) +
+      geom_density() +
+      facet_wrap(id~param, scales="free",
+                 labeller = labeller(id = trial_names)) +
+      theme(axis.text = element_text(size = 18))
+    ggsave(paste(target_dir, FS,
+                 paste("chains_marginal_", fn, ".png", sep = ""), sep=""), p2, 
+           width = 15, height = 11)
     return(p)                 
   })
   return(plots)
@@ -141,7 +150,9 @@ df.diagnostics =
   }) %>% bind_rows()
 }) %>% bind_rows()
 df.diagnostics %>% filter(rhat > 1.1)
-save_data(df.diagnostics, paste(target_dir, "mean-posteriors-and-diagnostics.rds", sep=FS))
+save_data(df.diagnostics, paste(target_dir, "mcmc-diagnostics.rds", sep=FS))
+# df.diagnostics <- readRDS(paste(target_dir, "mcmc-diagnostics.rds", sep=FS))
+
 
 # mean posterior values
 posterior_means <- df.diagnostics %>% dplyr::select(variable, mean, id) %>% 
@@ -149,6 +160,11 @@ posterior_means <- df.diagnostics %>% dplyr::select(variable, mean, id) %>%
   separate(variable, into=c("par", "prob"), sep="_") %>% 
   arrange(prob)
 posterior_means %>% filter(id == "if1_uh") 
+write_csv(posterior_means %>% 
+            mutate(mean = round(mean, 2)) %>% 
+            pivot_wider(names_from = "par", values_from = "mean"), 
+          paste(target_dir, FS, "posterior_means_likelihood_fns.csv", sep=""))
+
 
 # Generate new dependent tables -------------------------------------------
 # get Posterior predictive data
@@ -161,6 +177,7 @@ sampled_tables <- sample_tables(
 )
 save_data(sampled_tables, 
           paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
+# sampled_tables <- readRDS(paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
 
 pp_plots = make_pp_plots_new_dependent_tables(
   df.dep, sampled_tables, dep_trials, target_dir, "pp-tables"
@@ -177,7 +194,8 @@ sampled_tables.evs <- sample_tables(
   here("webppl-model", "posterior-dependent-data.wppl"), 
   repetitions = 100
 )
-#save_data(sampled_tables.evs, paste(target_dir, "sampled-tables-evs-posterior.rds", sep=FS))
+save_data(sampled_tables.evs, paste(target_dir, "sampled-tables-evs-posterior.rds", sep=FS))
+#sampled_tables.evs <- readRDS(paste(target_dir, "sampled-tables-evs-posterior.rds", sep=FS))
 
 
 # Posterior predictive ----------------------------------------------------
@@ -221,6 +239,8 @@ pp_samples_ll = group_map(posterior_samples.dep %>% group_by(id), ll_fn) %>%
                                 parse(text=expression("if"[2]*":U"^-{}*"L")),
                                 parse(text=expression("if"[2]*":LL")))))
 save_data(pp_samples_ll, paste(target_dir, "pp_samples_ll.rds",sep = FS))
+#pp_samples_ll <- readRDS(paste(target_dir, "pp_samples_ll.rds",sep = FS))
+
 
 # overall log likelihood of data from posterior predictive
 ll_X_obs.mean.all = pp_samples_ll %>% group_by(id) %>% 
@@ -229,11 +249,13 @@ p.all <- pp_samples_ll %>%
   ggplot(aes(x = ll_X_new)) + geom_density() +
   facet_wrap(~id, scales = "free", ncol = 4, labeller = labeller(id = label_parsed)) +
   geom_point(data = ll_X_obs.mean.all, aes(x=ev, y=0), size=2, color = 'firebrick') +
+  theme(axis.text = element_text(size = 20)) +
   labs(x = "log likelihood", y = "density")
 p.all
-ggsave(paste(target_dir, "pp-log-likelihood-dependent.png", sep = FS), p.all)
+ggsave(paste(target_dir, "pp-log-likelihood-dependent.png", sep = FS), p.all, 
+       width = 14, height = 7)
 
-# log likelihood separate for P(b), P(g|b) and P(g|¬b)
+ # log likelihood separate for P(b), P(g|b) and P(g|¬b)
 pp_samples_ll.long <- pp_samples_ll %>%
   pivot_longer(cols = c(-id, -x_blue, -x_if_bg, -x_if_nbg, -trial), 
                names_to = "prob", names_prefix = "ll_", 
@@ -296,7 +318,9 @@ pp_zoib_plots <- group_map(df.pp_x %>% group_by(trial, id), function(df, grp){
   
   
   p <- ppc_dens_overlay_grouped(y = y, yrep = df.mat[1:100,], group=p_grps) + 
-    labs(title=trial_names[[grp$trial]])
+    labs(title=trial_names[[grp$trial]]) +
+    theme(axis.text = element_text(size = 18), 
+          panel.spacing = unit(2, "lines"))
   
   ggsave(paste(target_dir, paste("pp_zoib_", grp$trial, ".png", sep=""), sep=FS), p)
   return(p)

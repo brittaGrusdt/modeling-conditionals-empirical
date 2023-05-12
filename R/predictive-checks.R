@@ -8,19 +8,21 @@ library(stringr)
 library(tidybayes)
 library(ggpubr)
 library(ggdist)
+library(ggthemes)
 library(scales)
 
 source(here("R", "helpers-plotting.R"))
 source(here("R", "helpers-load-data.R"))
 source(here("R", "helpers-rsa-model.R"))
-theme_set(theme_clean(base_size=24) + theme(legend.position = "top", text = element_text(size = 24)))
+theme_set(theme_clean(base_size=24) + 
+            theme(legend.position = "top", text = element_text(size = 24)))
 
 # Setup -------------------------------------------------------------------
 config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "flat_dependent"
 config_fits <- "alpha_theta"
-config_speaker_type <- "pragmatic_utt_type"
+config_speaker_type <- "literal" # "pragmatic_utt_type"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations, 
                                 config_fits = config_fits,
                                 config_speaker_type = config_speaker_type,
@@ -161,8 +163,8 @@ prior_predictive <- rsa_data %>% imap(function(x, id){
   group_by(sample_id)
 prior_predictive$idx <- group_indices(prior_predictive)
 save_data(prior_predictive, 
-          paste(params$speaker_mcmc_folder, "prior-predictive.rds", sep=FS))
-# prior_predictive <- readRDS(paste(params$speaker_mcmc_folder, "prior-predictive.rds", sep=FS))
+          paste(params$speaker_subfolder, "prior-predictive.rds", sep=FS))
+# prior_predictive <- readRDS(paste(params$speaker_subfolder, "prior-predictive.rds", sep=FS))
 
 ################################################################################
 # Plots -------------------------------------------------------------------
@@ -335,8 +337,13 @@ posterior_samples %>%
             mean_theta = mean(theta))
 
 # just run rsa once for each identical parameter combination!
+if(config_speaker_type == "literal") {
+  pars <- params$par_fit[params$par_fit != "alpha"]
+} else {
+  pars <- params$par_fit
+}
 params$sampled_params <- posterior_samples %>% 
-  distinct_at(vars(params$par_fit), .keep_all = T) %>% 
+  distinct_at(all_of(pars), .keep_all = T) %>% 
   dplyr::select(-rowid) %>% rowid_to_column()
 
 # then run RSA-model once with each sampled set of parameters
@@ -351,13 +358,9 @@ save_data(data, paste(params$speaker_mcmc_folder,
 #                        "posterior-predictive-wppl-output.rds", sep=FS))
 
 # add predictions as often as param combi occurred
-if("gamma" %in% params$par_fit){
-  nb_occs <- posterior_samples %>% group_by(alpha, theta, gamma) %>% 
-    summarize(n = n(), .groups = "drop")
-}else {
-  nb_occs <- posterior_samples %>% group_by(alpha, theta) %>% 
-    summarize(n = n(), .groups = "drop")
-}
+nb_occs <- posterior_samples %>% group_by_at(pars) %>% 
+  summarize(n = n(), .groups = "drop")
+
 nb_contexts <- df.observed$id %>% unique() %>% length()
 countenv <- environment()
 countenv$i <- 1
@@ -368,18 +371,26 @@ posterior_predictive <- data %>% imap(function(x, sample_id){
   pars <- params$sampled_params %>% filter(sample_id == !!sample_id)
   df.predictions <- map(predictions, function(y){
     df <- as_tibble(y) %>% mutate(ll_ci = as.numeric(ll_ci), 
-                                  alpha = pars$alpha, 
                                   theta = pars$theta)
     if("gamma" %in% colnames(pars)) df <- df %>% mutate(gamma = pars$gamma)
+    if("alpha" %in% colnames(pars)) df <- df %>% mutate(alpha = pars$alpha)
     return(df)
   }) %>% bind_rows() %>% add_column(sample_id = !!sample_id)
 
   if("gamma" %in% colnames(pars)){
-    n = nb_occs %>% 
-      filter(theta == pars$theta & alpha == pars$alpha & gamma == pars$gamma) %>% 
-      pull(n)
+    if("alpha" %in% colnames(pars)){
+      n = nb_occs %>% 
+        filter(theta==pars$theta & alpha==pars$alpha & gamma==pars$gamma) %>% 
+        pull(n)
+    } else {
+      n = nb_occs %>% filter(theta==pars$theta & gamma==pars$gamma) %>% pull(n)
+    }
   } else {
-    n = nb_occs %>% filter(theta == pars$theta & alpha == pars$alpha) %>% pull(n)
+    if("alpha" %in% colnames(pars)){
+      n = nb_occs %>% filter(theta == pars$theta & alpha == pars$alpha) %>% pull(n)
+    } else {
+      n = nb_occs %>% filter(theta == pars$theta) %>% pull(n)
+    }
   }
   if(n > 1){
     df.predictions <- df.predictions %>% slice(rep(row_number(), n)) %>% 
@@ -395,6 +406,13 @@ posterior_predictive <- data %>% imap(function(x, sample_id){
 save_data(posterior_predictive, 
           paste(params$speaker_mcmc_folder, "posterior-predictive.rds", sep=FS))
 # posterior_predictive <- readRDS(paste(params$speaker_mcmc_folder, "posterior-predictive.rds", sep=FS))
+
+# best params each context
+posterior_predictive %>% group_by(id) %>% filter(ll_ci == max(ll_ci)) %>% 
+  dplyr::select(id, all_of(pars)) %>% distinct()
+# best params overall
+pp.best_pars <- posterior_predictive %>% filter(ll_ci == max(ll_ci)) %>% 
+  dplyr::select(all_of(pars)) %>% distinct()
 
 
 # Plots Posterior + Prior predictives -------------------------------------
@@ -534,7 +552,7 @@ write_csv(evs_ll, paste(params$speaker_mcmc_folder, "evs-log-likelihood-ci.csv",
 map_ll <- get_log_likelihood_MAP(posterior_predictive, 
                                  posterior_samples,
                                  config_speaker_type, 
-                                 params$par_fit)
+                                 pars)
 write_csv(map_ll, paste(params$speaker_mcmc_folder, "MAP-log-likelihoods.csv", sep=FS))
 
 # log likelihood for MAP values separately for each context
@@ -542,7 +560,7 @@ map_ll.contexts <- map(TRIALS, function(c){
   map_ll <- get_log_likelihood_MAP(posterior_predictive %>% filter(id == c), 
                                    posterior_samples,
                                    config_speaker_type, 
-                                   params$par_fit)
+                                   pars)
   return(map_ll)
 }) %>% bind_rows() %>% arrange(id)
 write_csv(map_ll.contexts, 
@@ -611,7 +629,7 @@ ggsave(filename = here("results", "default-prior",
                        paste(config_weights_relations, "-", config_cns, "-500", sep=""),
                        "MAP_ll.png"), p.MAP_ll)
 
-# Boxplots negative log likelihoods for each sample from posterior (alpha, theta, gamma)
+# Boxplots log likelihoods for each sample from posterior (alpha, theta, gamma)
 pp.ll.speakers <- get_data_all_speakers(config_weights_relations, config_cns, 
                                         extra_packages, "posterior_predictive_ll.rds")
 p.pp_ll_speakers <- pp.ll.speakers %>% 
@@ -705,7 +723,7 @@ plots <- group_map(joint %>% group_by(id), function(df, df.grp){
     stat_cor(size = 6) +
     ggtitle(get_name_context(df.grp$id))
   ggsave(paste(params$config_dir, FS, 
-               "models-vs-data-", df.grp$id, ".png", sep=""), 
+               "models-vs-data-MAP-", df.grp$id, ".png", sep=""), 
          p, width = 16, height = 9)
    return(p)
 })
@@ -818,7 +836,6 @@ hdis.pp.speakers %>%
   filter(p_hat < 0.05)
 
 pp.utts <- pp.speakers %>% 
-  #filter(utterance %in% utts.model.ifs | utterance %in% utts.model.conjs) %>% 
   mutate(response = utterance) %>% chunk_utterances() %>% 
   rename(utt_type = utterance, utterance = response) %>% 
   group_by(id, speaker_model, idx, utt_type) %>% 
@@ -842,9 +859,33 @@ p.hdis.pragmatic <- hdis.pragmatic %>%
          color = guide_legend(title.position = "top")) +
   labs(y = "context", x = "Posterior predictive estimates with 95% HDI")
 p.hdis.pragmatic  
-
 ggsave(paste(params$config_dir, "hdis-pp-pragmatic-models.png", 
              sep=FS), width = 15, plot = p.hdis.pragmatic)
+
+# with observed estimates
+# add up utterance types
+df.obs <- df.observed %>% dplyr::select(estimate, id, trial, utt_type) %>% 
+  group_by(utt_type, trial) %>% 
+  summarize(estimate = sum(estimate), .groups = "drop_last") %>% 
+  mutate(label_id = map_chr(trial, get_str_contexts)) %>% 
+  add_column(speaker_model = "observed")
+
+p.hdis.pragmatic <- hdis.pragmatic %>% 
+  ggplot(aes(y=label_id, x = p_hat, color = speaker_model)) +
+  geom_point(aes(shape = utt_type), size=4) + 
+  geom_errorbarh(data = hdis.pragmatic, aes(xmin = .lower, xmax = .upper)) +
+  geom_point(data = df.obs, aes(x=estimate, y=label_id, shape = utt_type), size = 3) + 
+  scale_color_manual(name = "speaker model",
+                     values = SPEAKER_COLORS[c("pragmatic","pragmatic.gamma", 
+                                               "observed")]) +
+  scale_shape_discrete(name = "utterance type") +
+  scale_y_discrete(labels = label_parse()) +
+  guides(shape = guide_legend(title.position = "top"), 
+         color = guide_legend(title.position = "top")) +
+  labs(y = "context", x = "Posterior predictive estimates with 95% HDI")
+p.hdis.pragmatic  
+ggsave(paste(params$config_dir, "hdis-pp-pragmatic-models-with-empiric.png", 
+             sep=FS), width = 17, plot = p.hdis.pragmatic)
 
 # check neg log likelihood ind:UL -----------------------------------------
 levels_utts <- c("-A", "A", "-C", "C", 

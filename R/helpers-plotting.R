@@ -39,7 +39,8 @@ SPEAKER_COLORS <- c(
   `literal` = "blue",
   `pragmatic` = "red",
   `literal.gamma` = "skyblue",
-  `pragmatic.gamma` = "indianred4"
+  `pragmatic.gamma` = "indianred4",
+  `observed` = "turquoise4"
 )
 
 # context names -----------------------------------------------------------
@@ -102,7 +103,7 @@ get_str_contexts = function(trial){
 }
 
 # functions ---------------------------------------------------------------
-plot_correlation = function(results.joint, label.x = NA, label.y = 0.6){
+plot_correlation = function(results.joint, ncol, label.x = NA, label.y = 0.6){
   p_scatter = results.joint %>% 
     ggscatter(y = "behavioral", x = "model", 
               add = "reg.line", conf.int = TRUE, cor.method = "pearson", 
@@ -110,12 +111,12 @@ plot_correlation = function(results.joint, label.x = NA, label.y = 0.6){
     geom_point(size=1.5, aes_string(y="behavioral", x="model", 
                                     color = "utterance", 
                                     fill = "utterance")) +
-    geom_abline(intercept = 0, slope = 1, color="grey") +
+    #geom_abline(intercept = 0, slope = 1, color="grey") +
     theme_minimal(base_size=20) + 
     theme(legend.position = "top") +
     guides(fill = guide_legend(title.position = "top"), 
            color = guide_legend(title.position = "top")) +
-    facet_wrap(~label_id, labeller = label_parsed) +
+    facet_wrap(~label_id, labeller = label_parsed, ncol = ncol) +
     scale_color_manual(name = "utterance", values = UTT_COLORS) +
     scale_fill_manual(name = "utterance", values = UTT_COLORS) 
   if(!is.na(label.x)) {

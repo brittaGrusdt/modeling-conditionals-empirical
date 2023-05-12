@@ -12,24 +12,26 @@ library(bayesplot)
 source(here("R", "helpers-plotting.R"))
 source(here("R", "helpers-load-data.R"))
 source(here("R", "helpers-rsa-model.R"))
-theme_set(theme_clean(base_size=24) + 
-            theme(legend.position = "top", text = element_text(size = 24)))
+theme_set(theme_clean(base_size = 26) + 
+            theme(legend.position = "top", text = element_text(size = 26)))
 
 # Setup -------------------------------------------------------------------
 config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "flat_dependent"
-config_speaker_type <- "pragmatic_utt_type"
+#config_speaker_type <- "pragmatic_utt_type"
+config_speaker_type <- "literal"
 config_fits <- "alpha_theta"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 config_fits = config_fits,
                                 config_speaker_type = config_speaker_type,
-                                extra_packages = extra_packages)
+                                extra_packages = extra_packages, 
+                                mcmc_params = "mcmc_default_params")
 posterior <- webppl(program_file = params$wppl_fit_rsa, 
                     data_var = "data",
                     model_var = "non_normalized_posterior",
                     data = params,
-                    inference_opts = list(method = "MCMC", #"incrementalMH",
+                    inference_opts = list(method = "incrementalMH",
                                           samples = params$mcmc$n_samples,
                                           burn = params$mcmc$n_burn,
                                           lag = params$mcmc$n_lag,
@@ -46,9 +48,8 @@ posterior_samples <- posterior %>% unnest(c(value)) %>%
 save_data(posterior_samples %>% 
             add_column(config_prior_r = config_weights_relations, 
                        config_cns = config_cns), 
-          paste(params$speaker_speaker_mcmc_folder, "mcmc-posterior.rds", sep = FS))
+          paste(params$speaker_mcmc_folder, "mcmc-posterior.rds", sep = FS))
 # posterior_samples <- readRDS(here(params$speaker_mcmc_folder, "mcmc-posterior.rds")) 
-
 
 
 if(str_detect(config_fits, "gamma")){

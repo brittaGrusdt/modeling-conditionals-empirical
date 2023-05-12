@@ -11,7 +11,7 @@ pathes:
   dir_results: !expr paste("results", "default-prior", sep=.Platform$file.sep)
   dir_dep_likelihoods: !expr paste("results", "default-prior", "dependent-contexts", "zoib-model", sep=.Platform$file.sep)
   dir_ind_likelihoods: !expr paste("results", "default-prior", "independent-contexts", "zoib-model", sep=.Platform$file.sep)
-  fn_likelihoods: "mean-posteriors-and-diagnostics.rds"
+  fn_likelihoods: "posterior_means_likelihood_fns.csv"
   wppl_predictive_checks: !expr paste("webppl-model", "predictive-checks.wppl", sep=.Platform$file.sep)
   wppl_fit_rsa: !expr paste("webppl-model", "fit-rsa.wppl", sep=.Platform$file.sep)
   wppl_weights: !expr paste("webppl-model", "weights-contexts.wppl", sep=.Platform$file.sep)
@@ -77,6 +77,7 @@ par_fit:
   alpha_theta_gamma: !expr c("alpha", "theta", "gamma")
   #use_drift_kernel: TRUE
 
+# for fitting RSA parameters
 mcmc_default_params:
   n_samples: 5000
   n_burn: 10000

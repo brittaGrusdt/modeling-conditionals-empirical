@@ -2,29 +2,18 @@
 get_likelihood_params_fitted_data = function(){
   Sys.setenv(R_CONFIG_ACTIVE = "pathes")
   params <- config::get()
-  pars.dep <- readRDS(here(params$dir_dep_likelihoods, params$fn_likelihoods)) %>% 
-    dplyr::select(variable, mean, id) %>% 
-    rename(p = variable) %>% 
-    mutate(p = str_replace(p, "if_", "if")) %>% 
-    separate(p, into = c("param", "p"), sep="_") %>% 
+  pars.dep <- read_csv(here(params$dir_dep_likelihoods, params$fn_likelihoods)) %>% 
+    rename(p = prob) %>% 
     mutate(p = str_replace(p, "if", "if_")) %>% 
-    pivot_wider(names_from = "param", values_from = "mean")
+    arrange(p)
   
-  pars.ind <- readRDS(here(params$dir_ind_likelihoods, params$fn_likelihoods))
-  pars.ind.zoib <- pars.ind  %>% 
-    dplyr::select(variable, mean, id) %>%
-    filter(variable != "sd_delta") %>% 
-    rename(p = variable) %>% 
-    separate(p, into = c("param", "p"), sep="_") %>% 
-    pivot_wider(names_from = "param", values_from = "mean")
+  pars.ind <- read_csv(here(params$dir_ind_likelihoods, params$fn_likelihoods))
+  pars.ind.zoib <- pars.ind  %>% rename(p = prob) %>% 
+    filter(p != "delta") %>% dplyr::select(-sd)
   
-  pars.ind.gaussian <- pars.ind %>% 
-    dplyr::select(variable, mean, id) %>% 
-    rename(p = variable) %>% 
-    filter(p == "sd_delta") %>% 
-    separate(p, into = c("param", "p"), sep="_") %>% 
-    pivot_wider(names_from = "param", values_from = "mean")
-  
+  pars.ind.gaussian <- pars.ind %>% rename(p = prob) %>% 
+    dplyr::select(p, id, sd) %>% filter(!is.na(sd))
+ 
   pars = list(likelihoods_zoib = bind_rows(pars.dep, pars.ind.zoib),
               likelihoods_gaussian = pars.ind.gaussian)
   return(pars)

@@ -16,7 +16,10 @@ library(ggthemes)
 source(here("R", "helpers-data-models.R"))
 
 # for plots
-theme_set(theme_clean(base_size = 20) + theme(legend.position = "top"))
+theme_set(theme_clean(base_size = 26) + 
+            theme(legend.position = "top", 
+                  axis.text = element_text(size = 26),
+                  axis.title = element_text(size = 26)))
 prob_names <- c("blue"="P(b)", "green" = "P(g)")
 trial_names <- c("independent_hh" = "ind:HH", 
                  "independent_ll" = "ind:LL", 
@@ -172,8 +175,8 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
     data = data_webppl,
     packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
     inference_opts = list(method = "incrementalMH",
-                          samples = 2000,
-                          lag = 5,
+                          samples = 5000,
+                          lag = 10,
                           burn = 50000,
                           verbose = F),
     chains = 4, 
@@ -185,6 +188,7 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
   return(samples.posterior)
 })
 save_data(posterior_samples.ind, paste(target_dir, "posterior_samples.rds", sep=FS))
+# posterior_samples.ind <- readRDS(paste(target_dir, "posterior_samples.rds", sep=FS))
 posterior_samples.long <- posterior_samples.ind %>% 
   mutate(Chain = as.factor(Chain)) %>% 
   pivot_longer(cols=c(-Iteration, -Chain, -id), names_to = "param")
@@ -196,19 +200,23 @@ plots_chains = map(c("alpha", "gamma", "shape1", "shape2"), function(par){
     p <- posterior_samples.long %>% 
       filter(startsWith(param, fn)) %>% 
       ggplot(aes(x=Iteration, y = value, color=Chain, group = Chain)) + 
-      geom_line() + 
+      geom_line() +
+      theme(axis.text = element_text(size = 18)) +
       facet_wrap(id~param, scales="free", 
                  labeller = labeller(id = trial_names))
-    ggsave(paste(target_dir, FS, paste("chains_", fn, ".png", sep = ""), sep=""), p)
+    ggsave(paste(target_dir, FS, paste("chains_", fn, ".png", sep = ""), sep=""), 
+           p, width = 15, height = 11)
     
     p2 <- posterior_samples.long %>% 
       filter(startsWith(param, fn)) %>% 
       ggplot(aes(x=value, color=Chain, group = Chain)) + 
       geom_density() + 
+      theme(axis.text = element_text(size = 18)) +
       facet_wrap(id~param, scales="free", 
                  labeller = labeller(id = trial_names))
     ggsave(paste(target_dir, FS, 
-                 paste("chains_marginal_", fn, ".png", sep = ""), sep=""), p2)
+                 paste("chains_marginal_", fn, ".png", sep = ""), sep=""), p2,
+           width = 15, height = 11)
     return(p)                 
   })
   return(plots)
@@ -237,15 +245,22 @@ df.diagnostics = map(ind_trials, function(trial_id){
   return(bind_rows(df.summary, zoib_data))
   }) %>% bind_rows()
 
+save_data(df.diagnostics, paste(target_dir, "mcmc-diagnostics.rds", sep=FS))
+#df.diagnostics <- readRDS(paste(target_dir, "mcmc-diagnostics.rds", sep=FS))
+
 df.diagnostics %>% filter(rhat >=1.1)
-save_data(df.diagnostics, paste(target_dir, "mean-posteriors-and-diagnostics.rds", sep=FS))
+
 
 # Mean posterior values for likelihood function
 posterior_means <- df.diagnostics %>% dplyr::select(variable, mean, id) %>% 
   group_by(id) %>% 
   separate(variable, into=c("par", "prob"), sep="_") %>% 
   arrange(prob)
-# posterior_means %>% filter(id == "independent_uh")
+posterior_means %>% filter(id == "independent_uh")
+write_csv(posterior_means %>% 
+            mutate(mean = round(mean, 2)) %>% 
+            pivot_wider(names_from = "par", values_from = "mean"), 
+          paste(target_dir, FS, "posterior_means_likelihood_fns.csv", sep=""))
 
 # Plots with expected values of posterior distributions
 plots.pp_evs = map(ind_trials, function(trial_id){
@@ -273,6 +288,8 @@ plots.pp_evs = map(ind_trials, function(trial_id){
   p <- ppc_dens_overlay_grouped(y = y[1,] %>% as.numeric(), 
                                 yrep = mat, group = grp) +
     labs(title = trial_names[[trial_id]]) +
+    theme(axis.text.x = element_text(size = 18), 
+          panel.spacing = unit(2, "lines")) +
     facet_wrap("group", scales = "free")
   fn <- paste(target_dir, paste("new_data_evs_", trial_id, ".png", sep=""), sep=FS)
   ggsave(fn, p, width=11)
@@ -289,6 +306,9 @@ sampled_tables <- sample_tables(df.behav, ind_trials,
 )
 save_data(sampled_tables, 
           paste(target_dir, "sampled-tables-posterior-predictive.rds", sep=FS))
+# sampled_tables <- readRDS(paste(target_dir,
+#                                 "sampled-tables-posterior-predictive.rds", 
+#                                 sep=FS))
 
 # sampled_tables.evs <- sample_tables(
 #   df.behav, ind_trials, 
@@ -311,7 +331,7 @@ make_pp_plots = function(df.behav, trials, sampled_tables, target_dir, fn_prefix
   })
   return(pp_plots)
 }
-pp_plots <- make_pp_plots(df.behav, ind_trials, sampled_tables, target_dir, "pp-tables100")
+pp_plots <- make_pp_plots(df.behav, ind_trials, sampled_tables, target_dir, "pp-tables")
 
 
 # Posterior predictive ----------------------------------------------------
@@ -346,6 +366,7 @@ likelihood_fn = function(df.samples, df.grp){
 pp_samples_ll = group_map(posterior_samples.ind %>% group_by(id),
                           likelihood_fn) %>% bind_rows()
 save_data(pp_samples_ll, paste(target_dir, "pp_samples_ll.rds",sep = FS))
+# pp_samples_ll <- readRDS(paste(target_dir, "pp_samples_ll.rds",sep = FS))
 
 # overall log likelihood of data from posterior predictive
 ll_X_obs.mean = pp_samples_ll %>% group_by(id) %>% 
@@ -379,7 +400,11 @@ p <- df.ll_X %>%
   facet_wrap(prob~id, ncol=5, scales = "free", 
              labeller = labeller(id = trial_names)) +
   geom_point(data = ll_X_obs.mean, aes(x=ev, y=0), size=2, color = 'firebrick') +
+  theme(axis.text.x = element_text(size = 18), 
+        axis.text.y = element_text(size = 18)
+        ) + 
   labs(x = "log likelihood", y = "density")
 p
-ggsave(paste(target_dir, "pp-log-likelihood-independent-separate.png", sep = FS), p)
+ggsave(paste(target_dir, "pp-log-likelihood-independent-separate.png", sep=FS), 
+       p, height = 9, width = 18)
 
