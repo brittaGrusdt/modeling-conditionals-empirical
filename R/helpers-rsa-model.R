@@ -137,6 +137,7 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
     fn_weights <- "weights_ci.rds"
     path_weights <- paste(config_dir, fn_weights, sep=FS)
     if(file.exists(path_weights)) {
+      message(paste("read weights from", path_weights))
       params$weights <- readRDS(path_weights) %>% dplyr::select(-cn, -n_rsa_states)
     } else {
       message("compute weights...")
