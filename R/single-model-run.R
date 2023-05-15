@@ -4,22 +4,28 @@ library(tidyverse)
 library(tibble)
 library(ExpDataWrangling)
 library(ModelUtils)
+library(ggthemes)
 
 source(here("R", "helpers-plotting.R"))
 source(here("R", "helpers-load-data.R"))
 source(here("R", "helpers-rsa-model.R"))
 
-theme_set(theme_minimal(base_size=20) + theme(legend.position = "top"))
-
+theme_set(theme_clean(base_size = 26) + 
+            theme(legend.position = "top", text = element_text(size = 26)))
 # Setup -------------------------------------------------------------------
 config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "flat_dependent"
 config_speaker_type = "pragmatic_utt_type"
+# config_speaker_type = "literal"
+config_fits = "alpha_theta_gamma"
+# config_fits = "alpha_theta"
 params <- prepare_data_for_wppl(config_cns = config_cns, 
                                 config_weights_relations = config_weights_relations, 
                                 config_speaker_type = config_speaker_type,
+                                config_fits = config_fits,
                                 extra_packages = extra_packages)
+speaker_subfolder <- params$speaker_subfolder
 # set alpha and theta, otherwise default values used
 # params$alpha <- 2.29
 # params$theta <- 0.859
@@ -28,8 +34,12 @@ params <- prepare_data_for_wppl(config_cns = config_cns,
 #   pivot_wider(names_from="Parameter", values_from="value")
 
 # use MAP-parameters
-speaker_model <- "pragmatic_gamma"
-add_MAP_params(params, speaker_model, config_speaker_type)
+speaker_model <- str_split(config_speaker_type, "_")[[1]][1]
+if(str_ends(config_fits, "_gamma")) {
+  speaker_model <- paste(speaker_model, "gamma", sep="_")
+}
+
+params <- add_MAP_params(params, speaker_model, config_speaker_type)
 
 model <- "var rsa_predictions = run_rsa_model(data)
 rsa_predictions
@@ -47,11 +57,11 @@ model.predictions <- wppl_output %>%
   mutate(p_hat_round = round(p_hat, 2)) %>% 
   arrange(desc(p_hat))
 
-# save_data(model.predictions %>% add_column(theta=params$theta,
-#                                            gamma = params$gamma,
-#                                            alpha = params$alpha),
-#           here(params$config_dir,
-#                paste("rsa-results-MAP-", speaker_model, ".rds", sep="")))
+# save predictions using MAP-parameters
+save_data(model.predictions %>% add_column(theta = params$theta,
+                                           gamma = params$gamma,
+                                           alpha = params$alpha),
+          here(params$speaker_subfolder, paste("rsa-results-MAP.rds", sep=FS)))
 
 model.predictions %>% dplyr::select(ll_ci, id) %>% distinct() %>% 
   arrange(desc(ll_ci))
@@ -67,56 +77,25 @@ production.joint = left_join(model.predictions,
   translate_utterances() %>% 
   rename(utt = utterance, utterance = response)
 
-p.corr = plot_correlation(production.joint)
-ggsave(paste(params$config_dir, FS,
-             "alpha_theta_gamma", FS,
-             params$speaker_type, FS, 
-             "corr-plot-single-run_alpha-", params$alpha, 
-             "-theta-", params$theta, 
-             "-gamma-", params$gamma, 
-             ".png", sep=""), 
-       p.corr, 
-       width = 21, height = 10)
-plot_model_vs_data_bars(production.joint, 
-                        str_flatten(c("alpha", params$alpha, "theta", 
-                                      params$theta), collapse="_"), 
-                        by_utt_type = F)
+p.corr_ind = plot_correlation(
+  production.joint %>% filter(relation == "independent"), 
+  ncol = 3
+)
+p.corr_ind
+ggsave(paste(params$speaker_subfolder, "corr-plot-single-run_IND_MAPs.png", 
+             sep = FS),
+       p.corr_ind, width = 26, height = 12)
 
+p.corr_dep = plot_correlation(
+  production.joint %>% filter(relation != "independent"), 
+  ncol = 4
+)
+p.corr_dep
+ggsave(paste(params$speaker_subfolder, "corr-plot-single-run_DEP_MAPS.png", 
+             sep=FS), 
+       p.corr_dep, width = 30, height = 15)
 
-
-###############################################################################
-# new prediction based on repeatedly drawn N_participants states from 
-# weights to make rsa predictions
-# model.predictions <-  wppl_output %>% bind_rows() %>% rowid_to_column() %>% 
-#   unnest(c(p_hat, utterance)) %>% 
-#   mutate(ll_ci = as.numeric(ll_ci)) %>% 
-#   arrange(id, p_hat)
-# #hdis.mean = mean_hdi(model.predictions %>% group_by(id, utterance), p_hat)
-# pred.quantiles = group_map(model.predictions %>% group_by(id, utterance), 
-#                            function(df, df.grp){
-#   qs = quantile(df$p_hat, c(0.025, 0.5, 0.975))
-#   tibble(estimate=qs[['50%']], lower=qs[['2.5%']], upper = qs[['97.5%']], 
-#          id=df.grp$id, 
-#          utterance=df.grp$utterance)
-# }) %>% bind_rows()
-# model.predictions %>% filter(str_detect(id, "if1_uh")) %>% 
-#   ggplot(aes(x=p_hat, fill=id)) + 
-#   geom_histogram(alpha=0.5, position = 'identity', binwidth=0.01) +
-#   facet_wrap(~utterance, scales="free_y", ncol=4) +
-#   theme(axis.text.x = element_text(size=8)) +
-#   scale_fill_brewer(name = "context", palette = "Set1") +
-#   labs(x = "predicted probability")
-###############################################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
+# plot_model_vs_data_bars(production.joint, 
+#                         str_flatten(c("alpha", params$alpha, "theta", 
+#                                       params$theta), collapse="_"), 
+#                         by_utt_type = F)

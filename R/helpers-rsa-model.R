@@ -106,30 +106,30 @@ prepare_data_for_wppl <- function(config_cns = "default_cns",
   if(!dir.exists(config_dir)) dir.create(config_dir)
   params$config_dir <- config_dir
   
+  # add default (or provided) mcmc-params
+  Sys.setenv(R_CONFIG_ACTIVE =  mcmc_params)
+  pars.mcmc <- config::get()
+  params$mcmc <-  pars.mcmc
+  params$mcmc_folder <- paste(params$config_dir, FS,  
+                              pars.mcmc$n_samples,"-samples-", 
+                              pars.mcmc$n_burn, "-burn-", 
+                              pars.mcmc$n_lag, "-lag", sep="")
+  if(!dir.exists(here(params$mcmc_folder))){
+    dir.create(params$mcmc_folder, recursive=T)
+  }
   if(!is.na(config_fits)){
     Sys.setenv(R_CONFIG_ACTIVE = "par_fit")
     par = config::get()
     params$par_fit <- par[[config_fits]]
     
     sp_subfolder <- create_subconfig_folder_for_fitting(
-      config_dir = config_dir, 
+      config_dir = params$mcmc_folder, 
       par_fit = params$par_fit, 
       speaker_type = config_speaker_type
     )
     params$speaker_subfolder <- sp_subfolder
     params$fit_dir <- str_replace(sp_subfolder, 
                                   paste(FS, config_speaker_type, sep=""), "")
-    # add default (or provided) mcmc-params
-    Sys.setenv(R_CONFIG_ACTIVE =  mcmc_params)
-    pars.mcmc <- config::get()
-    params$mcmc <-  pars.mcmc
-    params$speaker_mcmc_folder <- paste(params$speaker_subfolder, FS,  
-                                        pars.mcmc$n_samples,"-samples-", 
-                                        pars.mcmc$n_burn, "-burn-", 
-                                        pars.mcmc$n_lag, "-lag", sep="")
-    if(!dir.exists(here(params$speaker_mcmc_folder))){
-      dir.create(params$speaker_mcmc_folder, recursive=T)
-    }
   }
   
   # 10. weights for each context and RSA-state
@@ -273,15 +273,14 @@ get_likelihoods_random_speaker <- function(config_cns, extra_packages,
 
 
 get_data_all_speakers = function(config_weights_relations, config_cns,
-                                 extra_packages, fn_data){
-  fn_literal <- here(
-    "results", "default-prior", 
-    paste(config_weights_relations, "-", config_cns, "-500", sep=""),
-    "alpha_theta", "literal", fn_data
+                                 extra_packages, fn_data, path_pragmatic_sp_ext){
+  fn_pragmatic.gamma <- here(path_pragmatic_sp_ext, fn_data)
+  fn_literal.gamma <- here(
+    str_replace(path_pragmatic_sp_ext, "pragmatic_utt_type", "literal"), 
+    fn_data
   )
-  fn_pragmatic <- str_replace(fn_literal, "literal", "pragmatic_utt_type")
-  fn_literal.gamma <- str_replace(fn_literal, "alpha_theta", "alpha_theta_gamma")
-  fn_pragmatic.gamma <- str_replace(fn_literal.gamma, "literal", "pragmatic_utt_type")
+  fn_pragmatic <- str_replace(fn_pragmatic.gamma, "alpha_theta_gamma", "alpha_theta")
+  fn_literal <-  str_replace(fn_literal.gamma, "alpha_theta_gamma", "alpha_theta")
   
   # retrieve data for random speaker since no posterior fitting done #
   ll.random_speaker = get_likelihoods_random_speaker(

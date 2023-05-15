@@ -118,38 +118,11 @@ fine_grained_marginals_single_dep:
 generate_utts:
   vars: !expr c("A", "C")
 
-# cleaned_data:
-#   fn_tbls_empiric_pids: "tables-empiric-pids.rds"
-#   fn_tables_smooth: "pe_tables_smooth.csv"
-#   fn_predictions_by_context: "predictions-by-context.csv"
-#   fn_predictions_by_context_chunked: "predictions-by-context-chunked.csv"
-#   fn_joint_results: "exact-model-behavioral-predictions.csv"
-# 
-# recleaned_data:
-#   fn_tbls_empiric_pids: "tables-empiric-pids-recleaned.rds"
-#   fn_tables_smooth: "pe_tables_smooth_recleaned.csv"
-#   fn_predictions_by_context: "predictions-by-context-recleaned.csv"
-#   fn_predictions_by_context_chunked: "predictions-by-context-chunked-recleaned.csv"
-#   fn_joint_results: "exact-model-behavioral-predictions-recleaned.csv"
-#   fn_recleaned_data: "recleaned-data.csv"
-
-
-# default_prior:
-#   dir_results: !expr paste("results", "default-prior", sep=.Platform$file.sep)
-#   name: "default-prior"
-#   # causal nets
-#   p_noise: !expr c("low")
-#   p_cp: !expr c("high")
-#   p_ant: !expr c("high", "low", "unc")
-#   rels_dep: !expr c("A implies C", "-A implies C", "C implies A", "-C implies A")
-#   p_a: !expr c("high", "low", "unc")
-#   p_c: !expr c("high", "low", "unc")
-  #fn_kl_divergences: "best-kl-divergences.rds"
-
+# MAP parameter values and log-likelihoods each context saved in 
+# 'MAP-log-likelihoods.csv' in respective speaker subfolder
 MAP_literal_gamma:
-  alpha: 4.35
   theta: 0.01
-  gamma: 0.99
+  gamma: 1
   
 MAP_literal:
   alpha: 5.61
@@ -162,9 +135,9 @@ MAP_pragmatic:
   gamma: 1
 
 MAP_pragmatic_gamma:
-  alpha: 1.66
-  theta: 0.9
-  gamma: 0.29
+  alpha: 1.67
+  theta: 0.90
+  gamma: 0.30
 
 
 priors_relations:

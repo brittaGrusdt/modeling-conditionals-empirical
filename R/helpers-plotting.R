@@ -1,4 +1,5 @@
 library(ggpubr)
+library(ggthemes)
 names_data <- c(`behavioral` = "darkgreen", `model` = "firebrick")
 
 # model utterances --------------------------------------------------------
@@ -108,21 +109,22 @@ plot_correlation = function(results.joint, ncol, label.x = NA, label.y = 0.6){
     ggscatter(y = "behavioral", x = "model", 
               add = "reg.line", conf.int = TRUE, cor.method = "pearson", 
               ylab = "Data", xlab = "Predictions") +
-    geom_point(size=1.5, aes_string(y="behavioral", x="model", 
-                                    color = "utterance", 
-                                    fill = "utterance")) +
-    #geom_abline(intercept = 0, slope = 1, color="grey") +
-    theme_minimal(base_size=20) + 
-    theme(legend.position = "top") +
+    geom_point(size=2, 
+               aes_string(y="behavioral", x="model", color = "utterance", 
+                          fill = "utterance")
+               ) +
     guides(fill = guide_legend(title.position = "top"), 
            color = guide_legend(title.position = "top")) +
     facet_wrap(~label_id, labeller = label_parsed, ncol = ncol) +
     scale_color_manual(name = "utterance", values = UTT_COLORS) +
-    scale_fill_manual(name = "utterance", values = UTT_COLORS) 
+    scale_fill_manual(name = "utterance", values = UTT_COLORS) +
+    theme_clean(base_size = 26) + 
+    theme(legend.position = "top", text = element_text(size = 26))
   if(!is.na(label.x)) {
-    p_scatter <- p_scatter + stat_cor(label.x = label.x, label.y = label.y)
+    p_scatter <- p_scatter + 
+      stat_cor(label.x = label.x, label.y = label.y, size = 6)
   } else {
-    p_scatter <- p_scatter + stat_cor(label.y = label.y)
+    p_scatter <- p_scatter + stat_cor(label.y = label.y, size = 6)
   }
   return(p_scatter)
 }

@@ -19,8 +19,8 @@ theme_set(theme_clean(base_size = 26) +
 config_cns = "fine_grained_dep_cns"
 extra_packages = c("dataHelpers")
 config_weights_relations = "flat_dependent"
-#config_speaker_type <- "pragmatic_utt_type"
-config_speaker_type <- "literal"
+config_speaker_type <- "pragmatic_utt_type"
+#config_speaker_type <- "literal"
 config_fits <- "alpha_theta"
 params <- prepare_data_for_wppl(config_cns, config_weights_relations,
                                 config_fits = config_fits,
@@ -48,8 +48,8 @@ posterior_samples <- posterior %>% unnest(c(value)) %>%
 save_data(posterior_samples %>% 
             add_column(config_prior_r = config_weights_relations, 
                        config_cns = config_cns), 
-          paste(params$speaker_mcmc_folder, "mcmc-posterior.rds", sep = FS))
-# posterior_samples <- readRDS(here(params$speaker_mcmc_folder, "mcmc-posterior.rds")) 
+          paste(params$speaker_subfolder, "mcmc-posterior.rds", sep = FS))
+# posterior_samples <- readRDS(here(params$speaker_subfolder, "mcmc-posterior.rds")) 
 
 
 if(str_detect(config_fits, "gamma")){
@@ -69,7 +69,7 @@ df.posterior <- posterior_samples %>% dplyr::select(Chain, Iteration, Parameter,
 if(str_detect(config_fits, "gamma") || config_speaker_type != "literal"){
   color_scheme_set("blue")
   p.pairs <- mcmc_pairs(df.posterior %>% dplyr::select(-Iteration))
-  ggsave(here(params$speaker_mcmc_folder, "pairs.png"), p.pairs)
+  ggsave(here(params$speaker_subfolder, "pairs.png"), p.pairs)
 }
   
 df.diagnostics <- df.posterior %>%  
@@ -77,7 +77,7 @@ df.diagnostics <- df.posterior %>%
   posterior::as_draws_matrix() %>% 
   posterior::summarise_draws()
 df.diagnostics
-write_csv(df.diagnostics, here(params$speaker_mcmc_folder, "diagnostics.csv"))
+write_csv(df.diagnostics, here(params$speaker_subfolder, "diagnostics.csv"))
 
 # chain plot, iteration vs. value for each chain
 p.chain <- mcmc_trace(df.posterior %>% dplyr::select(-Iteration), 
@@ -93,7 +93,7 @@ p_chain = posterior_samples %>%
   geom_line() + 
   facet_wrap(~Parameter, scales = "free", labeller = label_parsed, ncol = 3) 
 p_chain
-ggsave(here(params$speaker_mcmc_folder, "chains.png"), p_chain)
+ggsave(here(params$speaker_subfolder, "chains.png"), p_chain)
 
 # plot posterior densities
 p.density_posterior = posterior_samples %>% 
@@ -103,7 +103,7 @@ p.density_posterior = posterior_samples %>%
   geom_density() + 
   facet_wrap(~Parameter, scales = "free", labeller = label_parsed, ncol = 4)
 p.density_posterior
-ggsave(here(params$speaker_mcmc_folder, "density_posterior.png"), p.density_posterior)
+ggsave(here(params$speaker_subfolder, "density_posterior.png"), p.density_posterior)
 
 # posterior with highest density intervals
 hdis.mean_posterior <- mean_hdi(posterior_samples %>% group_by(Parameter), value)
@@ -121,7 +121,7 @@ p.posterior_hdis <-
   geom_point(data=hdis.mean_posterior, aes(x=value, y=0), color='black', size=2.5) +
   theme(panel.spacing = unit(2, "lines"))
 p.posterior_hdis  
-ggsave(here(params$speaker_mcmc_folder, "density_posterior_hdis.png"), p.posterior_hdis)
+ggsave(here(params$speaker_subfolder, "density_posterior_hdis.png"), p.posterior_hdis)
 
 # expected values
 params_evs <- posterior_samples %>% group_by(Parameter) %>% 
