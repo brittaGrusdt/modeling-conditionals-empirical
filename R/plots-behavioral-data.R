@@ -111,6 +111,11 @@ pe_task.means$world <- recode_factor(pe_task.means$world,
                                      `ac` = "bg", `a-c` = "b¬g", 
                                      `-ac` = "¬bg", `-a-c` = "¬b¬g")
 
+# bootstrapped confidence intervals mentioned in thesis #
+bootstrapped.pe %>% filter(world == "bg" & startsWith(as.character(id), "if2")) %>% arrange(lower)
+bootstrapped.pe %>% filter(world == "bg" & startsWith(as.character(id), "if1")) %>% arrange(lower)
+
+
 p.means_pe = pe_task.means %>% 
   mutate(relation = factor(relation, levels = c("if1", "if2", "independent"), 
                            labels = c(parse(text = expression("if"[1])), 
