@@ -132,6 +132,12 @@ posterior_samples.probs = bind_rows(
   separate(predictor, into = c("relation", "prior_blue"), sep = "_") %>% 
   mutate(prior_blue = factor(prior_blue, levels = c("low", "uncl", "unc", "high")))
 
+# highest density intervals mentioned in thesis #
+df.if2_low = posterior_samples.probs %>% filter(relation == "if2" & prior_blue == "low")
+tidybayes::hdi(df.if2_low$bg, .width = 0.95, .point = "mean")
+
+df.if1_low = posterior_samples.probs %>% filter(relation == "if1" & prior_blue == "low")
+tidybayes::hdi(df.if1_low$bg, .width = 0.95, .point = "mean")
 
 # Plot posterior ----------------------------------------------------------
 plot_posterior_prob = function(posterior_samples.probs, x, lab_x){
