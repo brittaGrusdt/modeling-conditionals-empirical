@@ -592,3 +592,173 @@ var run_rsa_model = function(data){
   //var summed_log_likelihood = sum(_.map(log_likelihood_by_trial, 'll'))
   return(Object.fromEntries(result))
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+var run_concessives = function(data){
+
+  var params = {
+    alpha: data.alpha ? data.alpha : PAR_DEFAULT.alpha,
+    gamma: data.gamma? data.gamma : PAR_DEFAULT.gamma,
+    theta: data.theta? data.theta : PAR_DEFAULT.theta,
+    theta_might: data.theta_might ? data.theta_might : PAR_DEFAULT.theta_might,
+    utt_cost: data.utt_cost ? data.utt_cost : PAR_DEFAULT.utt_cost
+  }
+  setParams(params)
+
+  var utt = data.utt[0]
+  var Prior = state_prior(model_tables_concessive)
+  globalStore.state_prior = Prior
+  // check whether with this new state prior there are any utterances
+  // that are not applicable to any state, if yes remove these
+  var invalid_utts = check_states_utts(
+    Prior.support(),
+    _.map(globalStore.utterances, 'utt'),
+    globalStore.thresholds,
+    params,
+    true
+  )['utts']
+
+  if(invalid_utts.length > 0){
+    globalStore.utterances = filter(function(u){
+      return(!invalid_utts.includes(u.utt))
+    }, globalStore.utterances)
+    display("# utterances: " + globalStore.utterances.length)
+  }
+
+  var Listener = Infer({method:'enumerate', model:function(){
+                    var state = sample(Prior)
+                    var sp = speaker(state, false)
+                    observe(sp, utt)
+                    return state
+                  }})
+  return(Listener)
+}
+
+/////////////////////// Example Krzyzanowska et al. ////////////////////////////
+
+var speaker_krz = function(state, displayU){
+  var literal_speaker = speaker_lit(state, false)
+  var utts_assertable = _.map(literal_speaker.support(), 'utt')
+  let distr = Infer({method:'enumerate', model: function(){
+    var utterance = sample(literal_speaker)
+    var inform_utype = filter(function(obj){
+      return(utts_assertable.includes(obj.utt))
+    }, get_informativeness_for_utype(globalStore.thresholds, utterance.type))
+    var best_assertable_u_same_type = sort(inform_utype, lt, function(x){
+      return(x.n)
+    })[0]
+    //display(best_assertable_u_same_type)
+    var LL = marginal_LL(best_assertable_u_same_type.utt, globalStore.thresholds, 'r')
+    var utility = LL.score(state.r)
+    if(displayU && utility != -Infinity){
+      display(utterance.utt + ": " + utility)
+    }
+    factor(globalStore.alpha * utility)
+    return(utterance)
+  }
+  });
+ return(distr)
+}
+
+
+var run_ex_krz_speaker = function(data){
+  var params = {
+    alpha: data.alpha ? data.alpha : PAR_DEFAULT.alpha,
+    gamma: data.gamma? data.gamma : PAR_DEFAULT.gamma,
+    theta: data.theta? data.theta : PAR_DEFAULT.theta,
+    theta_might: data.theta_might ? data.theta_might : PAR_DEFAULT.theta_might,
+    utt_cost: data.utt_cost ? data.utt_cost : PAR_DEFAULT.utt_cost
+  }
+  setParams(params)
+  display_free_params(data.speaker_type)
+  var weighted_rel = data.rel[0]
+
+  var distrs = map(function(bn){
+    var sp = data.speaker_type == "pragmatic_utt_type" ? speaker_utt_type(bn, false) :
+      data.speaker_type == "literal" ? speaker_lit(bn, false) :
+      data.speaker_type == "speaker-example-krz" ? speaker_krz(bn, false) :
+      speaker(bn, false);
+
+    var prediction = marginalize(sp, 'utt')
+    return([bn.bn_id, prediction])
+  }, ALL_BNS)
+  //var distributions = {"speaker_": distrs, "bns": bns}
+  var rsa_speaker_predictions = Object.fromEntries(distrs)
+
+  var Weights = Infer({method: 'enumerate', model:function(){
+    var s = sample(globalStore.state_prior)
+    var is_TT = Math.exp(s.table.score("AC")) >= globalStore.thresholds.theta
+    condition(is_TT & s.r == weighted_rel)
+    return(s)
+  }})
+  // note: Object.values(Weights.params) returns a list with an object
+  // mapping from support-values to an object
+  // (Weights is a distribution built with Infer, not a specific built-in Distribution!
+  // this is important because otherweise Weights.params returns a different structure!)
+  // {val: `the respective support value', prob: `its probability`} -> using twice Object.values()!
+  var state_prob_pairs = Object.values(Object.values(Weights.params)[0])
+  var states = _.map(state_prob_pairs, 'val')
+  var states_ids = _.map(states, 'bn_id')
+  var states_probs = _.map(state_prob_pairs, 'prob')
+
+  var predictions_certain_worlds_list = map(function(bn){
+    return([bn.w, rsa_speaker_predictions[bn.bn_id]])
+    //return({w: bn.w, prediction: rsa_speaker_predictions[bn.bn_id]})
+  }, BNS_CERTAIN_WORLD)
+  var predictions_certain_worlds = Object.fromEntries(predictions_certain_worlds_list)
+  var speaker_predictions = predictions_with_gamma(rsa_speaker_predictions,
+                                                   predictions_certain_worlds)
+
+
+  var model_prediction = get_weighted_rsa_prediction(
+    speaker_predictions, states_ids, states_probs
+  )
+  return(model_prediction)
+}
+
+
+
+// var run_ex_krz = function(data){
+//
+//   var params = {
+//     alpha: data.alpha ? data.alpha : PAR_DEFAULT.alpha,
+//     gamma: data.gamma? data.gamma : PAR_DEFAULT.gamma,
+//     theta: data.theta? data.theta : PAR_DEFAULT.theta,
+//     theta_might: data.theta_might ? data.theta_might : PAR_DEFAULT.theta_might,
+//     utt_cost: data.utt_cost ? data.utt_cost : PAR_DEFAULT.utt_cost
+//   }
+//   setParams(params)
+//
+//   //var Prior = state_prior(model_tables_ex_krz)
+//   //globalStore.state_prior = Prior
+//   // check whether with this new state prior there are any utterances
+//   // that are not applicable to any state, if yes remove these
+//   // var invalid_utts = check_states_utts(
+//   //   Prior.support(),
+//   //   _.map(globalStore.utterances, 'utt'),
+//   //   globalStore.thresholds,
+//   //   params,
+//   //   true
+//   // )['utts']
+//
+//   // if(invalid_utts.length > 0){
+//   //   globalStore.utterances = filter(function(u){
+//   //     return(!invalid_utts.includes(u.utt))
+//   //   }, globalStore.utterances)
+//   //   display("# utterances: " + globalStore.utterances.length)
+//   // }
+//   var rsa_speaker_predictions = run_speaker(ALL_BNS, data.speaker_type, false)
+//   return(rsa_speaker_predictions)
+//
+//
+//   // var Listener = Infer({method:'enumerate', model:function(){
+//   //                   var state = sample(globalStore.state_prior)
+//   //                   condition(state.probability == "high-high" ||
+//   //                             (state.probability == "high-high-low"))
+//   //                   var sp = speaker_krz(state, false)
+//   //                   observe(sp, data.utt[0])
+//   //                   return state
+//   //                 }})
+//   // return(Listener)
+// }

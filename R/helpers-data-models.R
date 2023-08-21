@@ -71,7 +71,7 @@ sample_tables = function(df.behav, trials, params, fn_wppl_program, repetitions=
           data_var = "data",
           model_var = "sample_table",
           data = data_webppl,
-          packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
+          packages = c(paste("webppl-model", "webppl-packages", "dataHelpers", sep = FS)),
           inference_opts = list(method = "forward", samples = nrow(data_trial))
         ) %>% as_tibble() %>% 
           pivot_wider(names_from = "Parameter", values_from = "value") %>% 

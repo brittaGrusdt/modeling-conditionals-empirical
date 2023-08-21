@@ -128,6 +128,38 @@ var model_tables =  function(){
   return(state)
 }
 
+/**
+* generates world states (tables) with relation A || C (p:0.1) or A implies C (p:0.9)
+* @return {object} : model state as returned by build_model_state
+*/
+var model_tables_concessive =  function(){
+  var dep_states = filter(function(r){
+    return(r.startsWith("A implies C"))
+  }, DEP_R_PROB)
+
+  var rdn = flip(0.1)
+  var cn = rdn ? uniformDraw(IND_R_PROB) : uniformDraw(dep_states);
+  var state = rdn ? model_independent_tables(cn) : model_dependent_tables(cn);
+  return(state)
+}
+
+/**
+* generates world states (tables) with relation A || C (p:0.1) or A implies C (p:0.9)
+* @return {object} : model state as returned by build_model_state
+*/
+var model_tables_ex_krz =  function(){
+  var dep_states = filter(function(r){
+    return(r == "A implies C_high-high-low")
+  }, DEP_R_PROB)
+  var ind_states = filter(function(r){
+    return(r == "A || C_high-high")
+  }, IND_R_PROB)
+
+  var rdn = flip(1)
+  var cn = rdn ? uniformDraw(dep_states) : uniformDraw(ind_states)
+  var state = rdn ? model_dependent_tables(cn) : model_independent_tables(cn);
+  return(state)
+}
 
 var smooth_extreme_values = function(val_obs){
   var epsilon = 0.000001;

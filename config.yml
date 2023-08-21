@@ -17,10 +17,10 @@ pathes:
   wppl_weights: !expr paste("webppl-model", "weights-contexts.wppl", sep=.Platform$file.sep)
   bootstrapped_ci_ratios: !expr paste("data", "bootstrapped_uc_ratios_ci.rds", sep=.Platform$file.sep)
   # pathes of own packages
-  dataHelpers: !expr paste("webppl-model", "node_modules", "dataHelpers", sep=.Platform$file.sep)
-  conditionalsDefault: !expr paste("webppl-model", "node_modules", "conditionalsDefault", sep=.Platform$file.sep)
-  conditionalsModel: !expr paste("webppl-model", "node_modules", "conditionalsModel", sep=.Platform$file.sep)
-  conditionalsHelpers: !expr paste("webppl-model", "node_modules", "conditionalsHelpers", sep=.Platform$file.sep)
+  dataHelpers: !expr paste("webppl-model", "webppl-packages", "dataHelpers", sep=.Platform$file.sep)
+  conditionalsDefault: !expr paste("webppl-model", "webppl-packages", "conditionalsDefault", sep=.Platform$file.sep)
+  conditionalsModel: !expr paste("webppl-model", "webppl-packages", "conditionalsModel", sep=.Platform$file.sep)
+  conditionalsHelpers: !expr paste("webppl-model", "webppl-packages", "conditionalsHelpers", sep=.Platform$file.sep)
   #dir_webppl_model: !expr paste("webppl-model", "default-model", sep = .Platform$file.sep)
 
 rsa_params:
@@ -33,11 +33,11 @@ rsa_params:
   default_theta: 0.9
   default_theta_might: 0
   nb_rsa_states: 500
-  packages:  !expr c(paste("webppl-model", "node_modules", 
+  packages:  !expr c(paste("webppl-model", "webppl-packages", 
                            "conditionalsHelpers", sep = .Platform$file.sep),
-                     paste("webppl-model", "node_modules", 
+                     paste("webppl-model", "webppl-packages", 
                            "conditionalsDefault", sep = .Platform$file.sep),
-                     paste("webppl-model", "node_modules", 
+                     paste("webppl-model", "webppl-packages", 
                            "conditionalsModel", sep = .Platform$file.sep))
   # parameters prior distributions rsa parameters
   alpha_mu: 1.5
@@ -125,7 +125,6 @@ MAP_literal_gamma:
   gamma: 1
   
 MAP_literal:
-  alpha: 5.61
   theta: 0.01
   gamma: 1
 
