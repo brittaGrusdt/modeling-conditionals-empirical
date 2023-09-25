@@ -173,7 +173,7 @@ posterior_samples.ind = map_dfr(ind_trials, function(trial_id){
     data_var = "data",
     model_var = "non_normalized_posterior",
     data = data_webppl,
-    packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS)),
+    packages = c(paste("webppl-model", "webppl-packages", "dataHelpers", sep = FS)),
     inference_opts = list(method = "incrementalMH",
                           samples = 5000,
                           lag = 10,
@@ -345,7 +345,7 @@ likelihood_fn = function(df.samples, df.grp){
     random_seed = params$seed_webppl,
     data_var = "data",
     data = data_webppl,
-    packages = c(paste("webppl-model", "node_modules", "dataHelpers", sep = FS))
+    packages = c(paste("webppl-model", "webppl-packages", "dataHelpers", sep = FS))
   ) 
   
   result = tibble(

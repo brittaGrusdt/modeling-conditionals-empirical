@@ -409,10 +409,8 @@ bootstrapped_uc_ratios_ci = group_map(
     }) %>% bind_rows()
     return(df)
   }) %>% bind_rows() 
-save_data(bootstrapped_uc_ratios_ci, here(params$dir_data, 
-                                        "bootstrapped_uc_ratios_ci.rds"))
-# bootstrapped_uc_ratios_ci <- readRDS(here(params$dir_data, 
-                                # "bootstrapped_uc_ratios_ci.rds"))
+save_data(bootstrapped_uc_ratios_ci, here("data", "bootstrapped_uc_ratios_ci.rds"))
+# bootstrapped_uc_ratios_ci <- readRDS(here("data", "bootstrapped_uc_ratios_ci.rds"))
 
 # estimated P(blue) vs. P(green) when conditional selected ----------------
 df.utt_freq_by_rel = data.uc %>% ungroup() %>% 
