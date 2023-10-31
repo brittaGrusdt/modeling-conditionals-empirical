@@ -1,6 +1,6 @@
 # modeling-conditionals-empirical
 
-This repository contains the code for Chapter 8 of my Ph.D thesis, in which
+This repository contains the code for Chapter 7 of my Ph.D thesis (see [dissertation](https://osnadocs.ub.uni-osnabrueck.de/handle/ds-202310249948)), in which
 I apply our RSA-model for the communication with conditionals (see [paper](https://semprag.org/index.php/sp/article/view/sp.15.13/3055)) on the empirical data from a behavioral experiment that we run (see [this repository](https://github.com/brittaGrusdt/communicating-uncertain-beliefs-conditionals)).
 
 
